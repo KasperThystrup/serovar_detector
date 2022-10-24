@@ -1,0 +1,44 @@
+import sys
+from glob import glob
+from re import sub
+from os.path import basename
+
+def determine_multithreading(do_multithread):  # Doesn't run at all...
+	match do_multithread:  ## Makes no sense..
+		case True: ## Doesn't do SHIT!
+			workflow.cores
+		case False: ## Doesn't do SHIT!
+			1
+	# This is same as return null
+
+
+configfile: "config/config.yaml"
+
+database = config["database"]
+sample_dir = config["sample_dir"]
+outdir = config["outdir"]
+
+threshold_id = config["threshold_id"]
+threshold_cov = config["threshold_cov"]
+
+debug = config["debug"]
+
+kma_multithreading = config["kma_multithreading"]
+mates = glob(pathname = "%s/*.fastq.gz" %sample_dir)
+
+samples = {sub("_R\d.fastq.gz", "", fn) for fn in [basename(mt) for mt in mates]}
+
+if len(samples) < 1:
+	sys.exit("fastq.gz files are missing!")
+
+kma_threads = determine_multithreading(kma_multithreading)
+
+species = basename(database).replace("_", " ") #
+
+rule all:
+	input:
+		serovar = "%s/Results/serovar.tsv" %outdir,
+
+
+include: "rules/detect_serovars.smk"
+include: "rules/summarise_serovars.smk"
