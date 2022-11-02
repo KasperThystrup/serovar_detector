@@ -1,7 +1,7 @@
 rule detect_capsules:
 	input:
-		mate1 = "%s/{sample}_R1.fastq.gz" %sample_dir,
-		mate2 = "%s/{sample}_R2.fastq.gz" %sample_dir
+		mate1 = "%s/Read_links/{sample}_R1.fastq.gz" %outdir,
+		mate2 = "%s/Read_links/{sample}_R2.fastq.gz" %outdir
 	params:
 		db = database,
 		prefix  = "%s/kma/{sample}/{sample}" %outdir
@@ -11,7 +11,8 @@ rule detect_capsules:
 	conda:
 		"../envs/kma.yaml"
 	threads:
-		kma_threads
+		#workflow.cores #kma_threads
+		1
 	shell:
 		"""
 		mkdir -p {output.kma_dir}
