@@ -3,18 +3,6 @@ from glob import glob
 from re import sub
 from os.path import basename
 
-def link_files(files):
-
-  for file_name in files:
-    sample = os.path.basename(file_name)
-    file_exists = os.path.isfile(sample)
-
-    if not file_exists:
-      print("Creating symlink for:", sample, sep = " ", flush = True)
-      os.symlink(src = file_name, dst = sample)
-  None
-
-
 configfile: "config/config.yaml"
 
 database = config["database"]
@@ -33,7 +21,6 @@ samples = {sub("_R\d[_\d+]*.fastq.gz", "", fn) for fn in [basename(mt) for mt in
 if len(samples) < 1:
 	sys.exit("fastq.gz files are missing!")
 
-kma_threads = workflow.cores
 
 species = basename(database).replace("_", " ") #
 

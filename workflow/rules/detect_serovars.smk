@@ -10,8 +10,6 @@ rule detect_capsules:
 		res_file = "%s/kma/{sample}/{sample}.res" %outdir
 	conda:
 		"../envs/kma.yaml"
-	threads:
-		kma_threads
 	shell:
 		"""
 		mkdir -p {output.kma_dir}

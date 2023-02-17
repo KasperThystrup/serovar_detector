@@ -1,7 +1,7 @@
 library(magrittr)
 
 
-read_res <- function(res_file, dbg){
+read_res <- function(res_file){
   
   logger::log_debug("Performing pattern matching to determine sample name from file: ", res_file)
   file_matches <- res_file %>%
@@ -34,6 +34,11 @@ read_res <- function(res_file, dbg){
 apply_thresholds <- function(res_table, threshold_id, threshold_cov){
   logger::log_debug("Applying thresholds")
   
+  empty_table <- nrow(res_table) == 0
+  
+  if (empty_table)
+    return(NULL)
+  
   dplyr::mutate(
     res_table,
     match_perfect = Template_Identity == 100 & Template_Coverage == 100,
@@ -43,15 +48,39 @@ apply_thresholds <- function(res_table, threshold_id, threshold_cov){
 }
 
 
-summarise_serovars <- function(kma_table, profiles, dbg){
+object_to_dataframe <- function(list_iterator, object){
+  item <- object[list_iterator]
+  serovar <- names(item)
+  genes <- unlist(item)
+  
+  dplyr::tibble(Gene = genes, Serovar = serovar)
+}
+
+
+list_to_table <- function(object){
+  purrr::map_dfr(seq_along(object), object_to_dataframe, object)
+}
+
+
+generate_serovar_profiles <- function(serovar_config_yaml){
+  logger::log_debug("Importing serovar profiles from: ", serovar_config_yaml)
+  serovar_yaml <- yaml::yaml.load_file(input = serovar_config_yaml)
+  
+  logger::log_debug("Converting format into dataframe.")
+  list_to_table(serovar_yaml)
+}
+
+
+resolve_serovars <- function(kma_table, profiles){
   
   logger::log_debug("Merging kma results with serovar profiles table.")
   kma_profile <- dplyr::select(
     kma_table, 
-    Sample, Template_Gene, Template_Strain, Template_Serovar
+    Sample, Template_Gene, Template_Strain, Template_Serovar, Template_Identity,
+    Template_Coverage, match_perfect, match_imperfect, match_partial
   ) %>%
     dplyr::left_join(
-      x = kma_table, y = profiles, by = c("Template_Gene" = "Gene")
+      y = profiles, by = c("Template_Gene" = "Gene")
     ) %>%
     dplyr::group_by(Sample, Serovar)
   
@@ -64,16 +93,14 @@ summarise_serovars <- function(kma_table, profiles, dbg){
     # Determine which serovars are best represented relative to capsule gene counts
     dplyr::summarise(
       Serovar,
-      serovar_count = max(Gene_count),
-      selected = Gene_count == serovar_count,
+      Gene_count,
+      selected = Gene_count == max(Gene_count),
       .groups = "drop"
     )
   
   logger::log_debug("Counting expected amount of capsule genes for each serovar")
   profiles_count <- dplyr::group_by(profiles, Serovar) %>%
     dplyr::summarise(capsule_count = dplyr::n())
-  if (dbg)
-    message(head(profiles_count))
   
   logger::log_debug("Filtering the most repressented serovar and quantifying capsule gene frequency.")
   subset(kma_overview, selected) %>%
@@ -83,7 +110,7 @@ summarise_serovars <- function(kma_table, profiles, dbg){
       Serovar = paste(Serovar, collapse = ","),
       count = dplyr::case_when(
         suggestions != 1 ~ NA_integer_,
-        TRUE ~ unique(serovar_count)
+        TRUE ~ unique(Gene_count)
       )
     ) %>%
     dplyr::left_join(y = profiles_count, by = "Serovar") %>%
@@ -103,7 +130,7 @@ summarise_serovars <- function(kma_table, profiles, dbg){
 }
 
 
-summarise_genes <- function(kma_table, profiles, dbg){
+resolve_genes <- function(kma_table, profiles){
 
   logger::log_debug("Compiling ID and Cov details for each gene.")
   gene_details <- dplyr::mutate(
@@ -141,33 +168,32 @@ summarise_genes <- function(kma_table, profiles, dbg){
 }
 
 
-summarize_serovars <- function(kma_dir, profiles_file, serovar_file, threshold_id, threshold_cov, dbg){
-  if (dbg){
-    logger::log_threshold(logger::DEBUG)
-    file_name <- file.path(getwd(), "summarize.RData")
-    logger::log_debug("Storing snakemake object at: ", file_name)
-    save(snakemake, file = file_name)
-  }
-  
+summarize_serovars <- function(kma_dir, serovar_config_yaml, threshold_id, threshold_cov, serovar_file){
   logger::log_info("Detecting .res files.")
   res_files <- list.files(path = kma_dir, pattern = "\\.res", full.names = TRUE, recursive = TRUE)
   
   logger::log_info("Reading and merging all .res files.")
-  res_table <- purrr::map_dfr(res_files, read_res, dbg)
+  res_table <- purrr::map_dfr(res_files, read_res)
   kma_table <- apply_thresholds(res_table, threshold_id, threshold_cov)
   
-  logger::log_info("Importing serovar profiles from file: ", profiles_file)
-  profiles <- readr::read_tsv(file = profiles_file, col_types = readr::cols())
+  if (is.null(kma_table))
+    stop(
+      "No `.res` files detected! Check the kma results location: ",
+      dirname(kma_dir) %>%
+        unique
+    )
+  
+  logger::log_info("Generating serovar profiles from profile-config file.")
+  profiles <- generate_serovar_profiles(serovar_config_yaml)
   
   logger::log_info("Determining the most frequently repressented serovar")
-  serovars <- summarise_serovars(kma_table, profiles, dbg)
+  serovars <- resolve_serovars(kma_table, profiles)
   
   logger::log_info("Compressing genes into a presentable format")
-  genes <- summarise_genes(kma_table, profiles, dbg)
+  genes <- resolve_genes(kma_table, profiles)
   
   logger::log_info("Collecting results")
   results <- dplyr::left_join(x = serovars, y = genes, by = "Sample")
-  message("Success!")
   
   if (file.exists(serovar_file)){
     logger::log_info("Reading existing results")
@@ -178,14 +204,23 @@ summarize_serovars <- function(kma_dir, profiles_file, serovar_file, threshold_i
   
   logger::log_info("Writing results to: ", serovar_file)
   readr::write_tsv(x = results, file = serovar_file)
-  message("Done!")
+  message("Success!")
 }
 
+
+
+kma_dir <- snakemake@input[["kma_dir"]]
+threshold_id <- snakemake@params[["threshold_id"]]
+threshold_cov <- snakemake@params[["threshold_cov"]]
+serovar_file <- snakemake@output[["serovar_file"]]
 dbg <- snakemake@params[["debug"]]
 
+logger::log_threshold(level = logger::INFO)
 if (dbg){
+  logger::log_threshold(level = logger::DEBUG)
+  
   tmp_file = file.path(
-    dirname(snakemake@output[["serovar_file"]]),
+    dirname(serovar_file),
     "summarize_serovars.RData"
   )
   
@@ -195,12 +230,11 @@ if (dbg){
 }
 
 summarize_serovars(
-  kma_dir = snakemake@input[["kma_dir"]],
-  profiles_file = snakemake@input[["profiles_file"]],
-  threshold_id = snakemake@params[["threshold_id"]],
-  threshold_cov = snakemake@params[["threshold_cov"]],
-  serovar_file = snakemake@output[["serovar_file"]],
-  dbg = snakemake@params[["debug"]]
+  kma_dir = kma_dir,
+  serovar_config_yaml = "config/serovar_profiles.yaml",
+  threshold_id = threshold_id,
+  threshold_cov = threshold_cov,
+  serovar_file = serovar_file
 )
 
 
