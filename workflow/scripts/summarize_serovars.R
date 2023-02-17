@@ -6,7 +6,7 @@ read_res <- function(res_file, dbg){
   logger::log_debug("Performing pattern matching to determine sample name from file: ", res_file)
   file_matches <- res_file %>%
     basename %>%
-    stringr::str_match_all(pattern = "^(?<sample>[A-Za-z0-9_-]+)\\.(?<ext>\\w+)$") %>%
+    stringr::str_match_all(pattern = "^(?<sample>[^\\.]+)\\.(?<ext>\\w+)$") %>%
     as.data.frame()
 
   sample_name <- file_matches$sample
@@ -77,12 +77,28 @@ summarise_serovars <- function(kma_table, profiles, dbg){
   
   logger::log_debug("Filtering the most repressented serovar and quantifying capsule gene frequency.")
   subset(kma_overview, selected) %>%
-    dplyr::select(Sample, Serovar, serovar_count) %>%
+    dplyr::group_by(Sample) %>%
+    dplyr::summarise(
+      suggestions = dplyr::n(),
+      Serovar = paste(Serovar, collapse = ","),
+      count = dplyr::case_when(
+        suggestions != 1 ~ NA_integer_,
+        TRUE ~ unique(serovar_count)
+      )
+    ) %>%
     dplyr::left_join(y = profiles_count, by = "Serovar") %>%
     dplyr::summarise(
       Sample,
-      Serovar = paste(Serovar, sep = ", "),
-      Frequency = paste(serovar_count, capsule_count, sep = " of ")
+      Serovar = dplyr::case_when(
+        is.na(count) ~ paste(Serovar, sep = ", "),
+        count / capsule_count < 0.5 ~ NA_character_,
+        TRUE ~ Serovar
+      ),
+        
+      Frequency = dplyr::case_when(
+        is.na(count) ~ NA_character_,
+        TRUE ~ paste(count, capsule_count, sep = " of ")
+      )
     )
 }
 
@@ -95,9 +111,11 @@ summarise_genes <- function(kma_table, profiles, dbg){
     gene_detailed = paste(
       Template_Gene, paste0("(", Template_Identity, "%"),
       "ID,", paste0(Template_Coverage, "%"), "COV)"
-    )
+    ),
+    class = stringr::str_extract(string = Template_Gene, pattern = "\\w$")
   ) %>%
-    dplyr::group_by(Sample)
+    dplyr::group_by(Sample) %>%
+    dplyr::arrange(class)
   
   logger::log_debug("Defining and annotating accepted gene- and partial gene-matches.")
   gene_summary <- dplyr::summarise(
@@ -163,6 +181,18 @@ summarize_serovars <- function(kma_dir, profiles_file, serovar_file, threshold_i
   message("Done!")
 }
 
+dbg <- snakemake@params[["debug"]]
+
+if (dbg){
+  tmp_file = file.path(
+    dirname(snakemake@output[["serovar_file"]]),
+    "summarize_serovars.RData"
+  )
+  
+  logger::log_debug("Writing snakemake R object to ", tmp_file)
+  save(snakemake, file = tmp_file)
+  
+}
 
 summarize_serovars(
   kma_dir = snakemake@input[["kma_dir"]],

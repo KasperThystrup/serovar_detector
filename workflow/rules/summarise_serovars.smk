@@ -2,7 +2,7 @@ rule serovar_profiles:
 	params:
 		debug = debug
 	output:
-		profiles_file = "%s/profiles/serovar_profiles.tsv" %outdir
+		profiles_file = "%s/serovar_profiles.tsv" %outdir
 	conda:
 		"../envs/R.yaml"
 	script:
@@ -18,7 +18,7 @@ rule summarize_serovars:
 		threshold_cov = threshold_cov,
 		debug = debug
 	output:
-		serovar_file = "%s/serovars.tsv" %outdir
+		serovar_file = "%s/Results/serovar.tsv" %outdir
 	conda:
 		"../envs/R.yaml"
 	script:

@@ -1,55 +1,45 @@
-import os
+import sys
+from glob import glob
+from re import sub
+from os.path import basename
+
+def link_files(files):
+
+  for file_name in files:
+    sample = os.path.basename(file_name)
+    file_exists = os.path.isfile(sample)
+
+    if not file_exists:
+      print("Creating symlink for:", sample, sep = " ", flush = True)
+      os.symlink(src = file_name, dst = sample)
+  None
+
 
 configfile: "config/config.yaml"
-pepfile: "pep/config.yaml"
-
-def check_sizes(obj1, obj2, obj3 = None):
-	if len([obj1]) != len([obj2]):
-		err = "Object sizes doesn't match:\nObject 1; %s - (%s)\nObject2; %s - (%s)" %(len(obj1), obj1, len(obj2), obj2)
-	elif obj3 is not None:
-		check_sizes(obj3, obj2)
-		check_sizes(obj1, obj2)
-
-
-
-def link_reads(samples, paths, files, outdir, mate):
-
-	check_sizes(obj1 = samples, obj2 = mate)
-	check_sizes(obj1 = paths, obj2 = files)
-
-	link_dir = "%s/Read_links" %outdir
-	outdir_missing = not os.path.isdir(link_dir)
-	if outdir_missing:
-		os.makedirs(link_dir, exist_ok = True)
-
-	for sample, path, file in zip(samples, paths, files):
-		file_path = "%s/%s" %(path, file)
-		file_link = "%s/%s_R%s.fastq.gz" %(link_dir, sample, mate)
-		link_exists = os.path.islink(file_link) or os.path.isfile(file_link)
-
-		if not link_exists:
-			print("Creating symlink for %s mate %s" %(sample, mate), sep = " ", flush = True)
-			os.symlink(src = file_path, dst = file_link)
-
-	None
 
 database = config["database"]
+sample_dir = config["sample_dir"]
 outdir = config["outdir"]
+
 threshold_id = config["threshold_id"]
 threshold_cov = config["threshold_cov"]
+
 debug = config["debug"]
 
-sample_table = pep.sample_table
-link_reads(samples = sample_table["sample_name"], paths = sample_table["path"], files = sample_table["read1"], outdir = outdir, mate = 1)
-link_reads(samples = sample_table["sample_name"], paths = sample_table["path"], files = sample_table["read2"], outdir = outdir, mate = 2)
+mates = glob(pathname = "%s/*.fastq.gz" %sample_dir)
 
-samples = sample_table["sample_name"]
+samples = {sub("_R\d[_\d+]*.fastq.gz", "", fn) for fn in [basename(mt) for mt in mates]}
 
+if len(samples) < 1:
+	sys.exit("fastq.gz files are missing!")
 
+kma_threads = workflow.cores
+
+species = basename(database).replace("_", " ") #
 
 rule all:
 	input:
-		serovar_file = "%s/serovars.tsv" %outdir
+		serovar = "%s/Results/serovar.tsv" %outdir
 
 include: "rules/detect_serovars.smk"
 include: "rules/summarise_serovars.smk"
