@@ -103,7 +103,7 @@ resolve_serovars <- function(kma_table, profiles){
     dplyr::summarise(capsule_count = dplyr::n())
   
   logger::log_debug("Filtering the most repressented serovar and quantifying capsule gene frequency.")
-  subset(kma_overview, selected) %>%
+  serovars <- subset(kma_overview, selected) %>%
     dplyr::group_by(Sample) %>%
     dplyr::summarise(
       suggestions = dplyr::n(),
@@ -116,7 +116,7 @@ resolve_serovars <- function(kma_table, profiles){
     dplyr::left_join(y = profiles_count, by = "Serovar") %>%
     dplyr::summarise(
       Sample,
-      Serovar = dplyr::case_when(
+      Suggested_serovar = dplyr::case_when(
         is.na(count) ~ paste(Serovar, sep = ", "),
         count / capsule_count < 0.5 ~ NA_character_,
         TRUE ~ Serovar
@@ -127,17 +127,24 @@ resolve_serovars <- function(kma_table, profiles){
         TRUE ~ paste(count, capsule_count, sep = " of ")
       )
     )
-}
-
-
-resolve_genes <- function(kma_table, profiles){
-
-  logger::log_debug("Compiling ID and Cov details for each gene.")
-  gene_details <- dplyr::mutate(
-    kma_table,
-    gene_detailed = paste(
-      Template_Gene, paste0("(", Template_Identity, "%"),
-      "ID,", paste0(Template_Coverage, "%"), "COV)"
+  
+  kma_merged <- dplyr::left_join(kma_profile, serovars, by = "Sample") %>%
+    dplyr::group_by(Sample, Template_Gene)
+  
+  kma_detailed <- dplyr::mutate(
+    kma_merged,
+    member = any(Serovar == Suggested_serovar),
+    gene_id = dplyr::case_when(
+      Template_Identity == 100 ~ "",
+      TRUE ~ paste0(Template_Identity, "% ID")
+    ),
+    gene_cov = dplyr::case_when(
+      Template_Coverage == 100 ~ "",
+      TRUE ~ paste0(Template_Coverage, "% COV")
+    ),
+    gene_detailed = dplyr::case_when(
+      match_perfect ~ Template_Gene,
+      TRUE ~ paste0(Template_Gene, " (", gene_id, ", ", gene_cov, ")")
     ),
     class = stringr::str_extract(string = Template_Gene, pattern = "\\w$")
   ) %>%
@@ -145,27 +152,49 @@ resolve_genes <- function(kma_table, profiles){
     dplyr::arrange(class)
   
   logger::log_debug("Defining and annotating accepted gene- and partial gene-matches.")
-  gene_summary <- dplyr::summarise(
-    gene_details,
-    Genes = dplyr::case_when(
-      match_perfect ~ Template_Gene,
-      match_imperfect ~ gene_detailed
+  kma_genes <- dplyr::summarise(
+    kma_detailed,
+    Serovar_match = dplyr::case_when(
+      member & match_perfect ~ gene_detailed,
+      member & match_imperfect ~ gene_detailed
     ),
-    Partial_Genes = dplyr::case_when(
-      match_partial ~ gene_detailed
+    Serovar_partial = dplyr::case_when(
+      member & match_partial ~ gene_detailed
+    ),
+    
+    Others_match = dplyr::case_when(
+      !member & match_perfect ~ gene_detailed,
+      !member & match_imperfect ~ gene_detailed
+    ),
+    Others_partial = dplyr::case_when(
+      !member & match_partial ~ gene_detailed
     ),
     .groups = "keep"
   )
-  
+
   logger::log_debug("Removing NA's and compressing accepted- and partial -genes into single columns.")
-  dplyr::summarise(
-    gene_summary,
-    Genes = paste0(Genes[!is.na(Genes)], collapse = ", "),
-    Partial_Genes = paste0(Partial_Genes[!is.na(Partial_Genes)], collapse = ", "),
+  genes <- dplyr::summarise(
+    kma_genes,
+    Serovar_match = paste0(unique(Serovar_match[!is.na(Serovar_match)]), collapse = ", "),
+    Serovar_partial = paste0(unique(Serovar_partial[!is.na(Serovar_partial)]), collapse = ", "),
+    Others_match = paste0(unique(Others_match[!is.na(Others_match)]), collapse = ", "),
+    Others_partial = paste0(unique(Others_partial[!is.na(Others_partial)]), collapse = ", "),
     .groups = "drop"
   )
-
+  
+  dplyr::left_join(serovars, genes, by = "Sample")
+    
 }
+
+
+# resolve_genes <- function(kma_table, profiles){
+# 
+#   
+
+#   
+
+# 
+# }
 
 
 summarize_serovars <- function(kma_dir, serovar_config_yaml, threshold_id, threshold_cov, serovar_file){
@@ -186,15 +215,9 @@ summarize_serovars <- function(kma_dir, serovar_config_yaml, threshold_id, thres
   logger::log_info("Generating serovar profiles from profile-config file.")
   profiles <- generate_serovar_profiles(serovar_config_yaml)
   
-  logger::log_info("Determining the most frequently repressented serovar")
-  serovars <- resolve_serovars(kma_table, profiles)
-  
-  logger::log_info("Compressing genes into a presentable format")
-  genes <- resolve_genes(kma_table, profiles)
-  
-  logger::log_info("Collecting results")
-  results <- dplyr::left_join(x = serovars, y = genes, by = "Sample")
-  
+  logger::log_info("Determining the most frequently repressented serovars and serovar genes.")
+  results <- resolve_serovars(kma_table, profiles)
+ 
   if (file.exists(serovar_file)){
     logger::log_info("Reading existing results")
     results_old <- readr::read_tsv(serovar_file)
