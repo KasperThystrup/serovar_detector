@@ -4,6 +4,7 @@ rule summarize_serovars:
 	params:
 		threshold_id = threshold_id,
 		threshold_cov = threshold_cov,
+		metadata_file = metadata_file,
 		debug = debug
 	output:
 		serovar_file = "%s/Results/serovar.tsv" %outdir

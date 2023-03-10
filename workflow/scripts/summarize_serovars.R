@@ -31,6 +31,20 @@ read_res <- function(res_file){
 }
 
 
+read_metadata <- function(metadata_file){
+  message("INFO: Reading metadata file - ", metadata_file)
+  metadata <- readr::read_tsv(file = metadata_file, show_col_types = FALSE)
+  
+  if(ncol(metadata) < 2){
+    warning("There was only one column detected in the metadata file.\n",
+            "Metadata will be ignored.")
+    return(NULL)
+  }
+  
+  return(metadata)
+}
+
+
 apply_thresholds <- function(res_table, threshold_id, threshold_cov){
   logger::log_debug("Applying thresholds")
   
@@ -136,7 +150,7 @@ resolve_serovars <- function(kma_table, profiles){
     member = any(Serovar == Suggested_serovar),
     gene_id = dplyr::case_when(
       Template_Identity == 100 ~ "",
-      TRUE ~ paste0(Template_Identity, "% ID")
+      TRUE ~ paste0(Template_Identity, "% ID, ")
     ),
     gene_cov = dplyr::case_when(
       Template_Coverage == 100 ~ "",
@@ -144,7 +158,7 @@ resolve_serovars <- function(kma_table, profiles){
     ),
     gene_detailed = dplyr::case_when(
       match_perfect ~ Template_Gene,
-      TRUE ~ paste0(Template_Gene, " (", gene_id, ", ", gene_cov, ")")
+      TRUE ~ paste0(Template_Gene, " (", gene_id, gene_cov, ")")
     ),
     class = stringr::str_extract(string = Template_Gene, pattern = "\\w$")
   ) %>%
@@ -187,17 +201,14 @@ resolve_serovars <- function(kma_table, profiles){
 }
 
 
-# resolve_genes <- function(kma_table, profiles){
-# 
-#   
+merge_metadata <- function(table, metadata){
+  if (is.null(metadata))
+    return(table)
+  dplyr::left_join(table, metadata, by = "Sample")
+}
+  
 
-#   
-
-# 
-# }
-
-
-summarize_serovars <- function(kma_dir, serovar_config_yaml, threshold_id, threshold_cov, serovar_file){
+summarize_serovars <- function(kma_dir, serovar_config_yaml, threshold_id, threshold_cov, metadata_file, serovar_file){
   logger::log_info("Detecting .res files.")
   res_files <- list.files(path = kma_dir, pattern = "\\.res", full.names = TRUE, recursive = TRUE)
   
@@ -225,16 +236,21 @@ summarize_serovars <- function(kma_dir, serovar_config_yaml, threshold_id, thres
     results <- dplyr::distinct(results_merged)
   }
   
+  if(file.exists(metadata_file)){
+    metadata <- read_metadata(metadata_file)
+    results <- merge_metadata(table = results, metadata)
+  }
+  
   logger::log_info("Writing results to: ", serovar_file)
   readr::write_tsv(x = results, file = serovar_file)
   message("Success!")
 }
 
 
-
 kma_dir <- snakemake@input[["kma_dir"]]
 threshold_id <- snakemake@params[["threshold_id"]]
 threshold_cov <- snakemake@params[["threshold_cov"]]
+metadata_file <- snakemake@params[["metadata_file"]]
 serovar_file <- snakemake@output[["serovar_file"]]
 dbg <- snakemake@params[["debug"]]
 
@@ -257,6 +273,7 @@ summarize_serovars(
   serovar_config_yaml = "config/serovar_profiles.yaml",
   threshold_id = threshold_id,
   threshold_cov = threshold_cov,
+  metadata_file = metadata_file,
   serovar_file = serovar_file
 )
 

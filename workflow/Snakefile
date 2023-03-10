@@ -1,4 +1,6 @@
 import sys
+import csv
+from copy import deepcopy
 from glob import glob
 from re import sub
 from os.path import basename
@@ -21,12 +23,36 @@ samples = {sub("_R\d[_\d+]*.fastq.gz", "", fn) for fn in [basename(mt) for mt in
 if len(samples) < 1:
 	sys.exit("fastq.gz files are missing!")
 
+metadata_file = "%s/metadata.tsv" %outdir
+
 
 species = basename(database).replace("_", " ") #
 
 rule all:
 	input:
 		serovar = "%s/Results/serovar.tsv" %outdir
+
+
+rule init:
+        output:
+                temp("%s/init.tmp" %outdir)
+        shell:
+                "mkdir -p %s && touch {output}" %outdir
+
+
+rule metadata:
+	input:
+		rules.init.output
+	output:
+		metadata_file
+	run:
+		sample_list = ["Sample"] + list(samples)
+		with open(metadata_file, "w", newline = "\n") as meta_file:
+			meta_output = csv.writer(meta_file, delimiter = "\t")
+			for line in sample_list:
+				meta_output.writerow([line])
+
+
 
 include: "rules/detect_serovars.smk"
 include: "rules/summarise_serovars.smk"
