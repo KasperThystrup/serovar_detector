@@ -19,6 +19,10 @@ read_res <- function(res_file){
   
   header[1] <- "Template"
   
+  logger::log_debug("Determining file modification date.")
+  timestamp <- file.mtime(res_file)
+  mod_date <- format(timestamp, format = "%Y-%m-%d")
+  
   logger::log_debug("Reading file.\n\n")
   readr::read_tsv(file = res_file, col_names = header, col_types = "ciiiddddddd", skip = 1) %>%
     tidyr::separate(
@@ -27,11 +31,14 @@ read_res <- function(res_file){
       sep = "_"
     ) %>%
     # Adding sample name column
-    dplyr::mutate(Sample = sample_name)
+    dplyr::mutate(Sample = sample_name, Date = mod_date)
 }
 
 
 read_metadata <- function(metadata_file){
+  if (file.exists(metadata_file))
+    stop("No metadata file exists.\nRun `snakemake --cores metadata` and then rerun again!")
+  
   message("INFO: Reading metadata file - ", metadata_file)
   metadata <- readr::read_tsv(file = metadata_file, show_col_types = FALSE)
   
@@ -87,6 +94,10 @@ generate_serovar_profiles <- function(serovar_config_yaml){
 
 resolve_serovars <- function(kma_table, profiles){
   
+  logger::log_debug("Extracting Date information")
+  kma_dates <- dplyr::select(kma_table, Sample, Date) %>%
+    dplyr::distinct()
+  
   logger::log_debug("Merging kma results with serovar profiles table.")
   kma_profile <- dplyr::select(
     kma_table, 
@@ -117,7 +128,7 @@ resolve_serovars <- function(kma_table, profiles){
     dplyr::summarise(capsule_count = dplyr::n())
   
   logger::log_debug("Filtering the most repressented serovar and quantifying capsule gene frequency.")
-  serovars <- subset(kma_overview, selected) %>%
+  serovar_suggestions <- subset(kma_overview, selected) %>%
     dplyr::group_by(Sample) %>%
     dplyr::summarise(
       suggestions = dplyr::n(),
@@ -126,8 +137,11 @@ resolve_serovars <- function(kma_table, profiles){
         suggestions != 1 ~ NA_integer_,
         TRUE ~ unique(Gene_count)
       )
-    ) %>%
-    dplyr::left_join(y = profiles_count, by = "Serovar") %>%
+    )
+  
+  serovars_raw <- dplyr::left_join(
+    x = serovar_suggestions, y = profiles_count, by = "Serovar"
+  ) %>%
     dplyr::summarise(
       Sample,
       Suggested_serovar = dplyr::case_when(
@@ -139,8 +153,12 @@ resolve_serovars <- function(kma_table, profiles){
       Frequency = dplyr::case_when(
         is.na(count) ~ NA_character_,
         TRUE ~ paste(count, capsule_count, sep = " of ")
-      )
+      ),
+      .groups = "keep"
     )
+  
+  serovars <- dplyr::inner_join(x = serovars_raw, kma_dates) %>%
+    dplyr::relocate(Date, .after = Sample)
   
   kma_merged <- dplyr::left_join(kma_profile, serovars, by = "Sample") %>%
     dplyr::group_by(Sample, Template_Gene)
@@ -185,7 +203,7 @@ resolve_serovars <- function(kma_table, profiles){
     ),
     .groups = "keep"
   )
-
+  
   logger::log_debug("Removing NA's and compressing accepted- and partial -genes into single columns.")
   genes <- dplyr::summarise(
     kma_genes,
@@ -204,6 +222,7 @@ resolve_serovars <- function(kma_table, profiles){
 merge_metadata <- function(table, metadata){
   if (is.null(metadata))
     return(table)
+  
   dplyr::left_join(table, metadata, by = "Sample")
 }
   
@@ -232,11 +251,12 @@ summarize_serovars <- function(kma_dir, serovar_config_yaml, threshold_id, thres
   if (file.exists(serovar_file)){
     logger::log_info("Reading existing results")
     results_old <- readr::read_tsv(serovar_file)
-    results_merged <- dplyr::bind_rows(results, results_old)
-    results <- dplyr::distinct(results_merged)
+    old_samples <- dplyr::pull(results_old, Sample)
+    results_new <- subset(results, !(Sample %in% old_samples))
+    results_merged <- dplyr::bind_rows(results_new, results_old)
   }
   
-  if(file.exists(metadata_file)){
+  if(!is.null(metadata_file)){
     metadata <- read_metadata(metadata_file)
     results <- merge_metadata(table = results, metadata)
   }
