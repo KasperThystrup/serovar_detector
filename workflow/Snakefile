@@ -24,7 +24,8 @@ if len(samples) < 1:
 	sys.exit("fastq.gz files are missing!")
 
 metadata_file = "%s/metadata.tsv" %outdir
-
+if not os.path.isfile(metadata_file):
+	metadata_file = None
 
 species = basename(database).replace("_", " ") #
 
