@@ -1,13 +1,15 @@
 rule summarize_serovars:
 	input:
-		kma_dir = expand(rules.detect_capsules.output.kma_dir, sample = samples)
+		assembly_results_dir = expand(rules.detect_assembly_capsules.output.kma_dir, sample = sample_assemblies),
+		assembly_results = expand(rules.detect_assembly_capsules.output.res_file, sample = sample_assemblies),
+		reads_results_dir = expand(rules.detect_reads_capsules.output.kma_dir, sample = sample_reads),
+		reads_results = expand(rules.detect_reads_capsules.output.res_file, sample = sample_reads)
 	params:
-		threshold_id = threshold_id,
-		threshold_cov = threshold_cov,
+		threshold = threshold,
 		metadata_file = metadata_file,
 		debug = debug
 	output:
-		serovar_file = "%s/Results/serovar.tsv" %outdir
+		serovar_file = "%s/serovar.tsv" %outdir
 	conda:
 		"../envs/R.yaml"
 	script:

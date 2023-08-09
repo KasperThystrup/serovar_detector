@@ -6,7 +6,7 @@ read_res <- function(res_file){
   logger::log_debug("Performing pattern matching to determine sample name from file: ", res_file)
   file_matches <- res_file %>%
     basename %>%
-    stringr::str_match_all(pattern = "^(?<sample>[^\\.]+)\\.(?<ext>\\w+)$") %>%
+    stringr::str_match_all(pattern = "^(?<sample>[^\\.]+(\\.[^\\.]+)*)\\.(?<ext>\\w+)$") %>%
     as.data.frame()
 
   sample_name <- file_matches$sample
@@ -36,23 +36,23 @@ read_res <- function(res_file){
 
 
 read_metadata <- function(metadata_file){
-  if (file.exists(metadata_file))
-    stop("No metadata file exists.\nRun `snakemake --cores metadata` and then rerun again!")
   
   message("INFO: Reading metadata file - ", metadata_file)
   metadata <- readr::read_tsv(file = metadata_file, show_col_types = FALSE)
   
-  if(ncol(metadata) < 2){
+  if(ncol(metadata) == 1){
     warning("There was only one column detected in the metadata file.\n",
             "Metadata will be ignored.")
-    return(NULL)
+    metadata <- NULL
+  } else if (nrow(metadata) == 0){
+    metadata <- NULL
   }
   
   return(metadata)
 }
 
 
-apply_thresholds <- function(res_table, threshold_id, threshold_cov){
+apply_thresholds <- function(res_table, threshold){
   logger::log_debug("Applying thresholds")
   
   empty_table <- nrow(res_table) == 0
@@ -63,7 +63,7 @@ apply_thresholds <- function(res_table, threshold_id, threshold_cov){
   dplyr::mutate(
     res_table,
     match_perfect = Template_Identity == 100 & Template_Coverage == 100,
-    match_imperfect = !match_perfect & (Template_Identity >= threshold_id & Template_Coverage >= threshold_cov), # Manual thresholds!!
+    match_imperfect = !match_perfect & (Template_Identity >= threshold & Template_Coverage >= threshold), # Manual thresholds!!
     match_partial = !match_imperfect & !match_perfect
   )
 }
@@ -227,13 +227,10 @@ merge_metadata <- function(table, metadata){
 }
   
 
-summarize_serovars <- function(kma_dir, serovar_config_yaml, threshold_id, threshold_cov, metadata_file, serovar_file){
-  logger::log_info("Detecting .res files.")
-  res_files <- list.files(path = kma_dir, pattern = "\\.res", full.names = TRUE, recursive = TRUE)
-  
+summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, metadata_file, serovar_file){
   logger::log_info("Reading and merging all .res files.")
-  res_table <- purrr::map_dfr(res_files, read_res)
-  kma_table <- apply_thresholds(res_table, threshold_id, threshold_cov)
+  res_table <- purrr::map_dfr(kma_files, read_res)
+  kma_table <- apply_thresholds(res_table, threshold)
   
   if (is.null(kma_table))
     stop(
@@ -256,7 +253,8 @@ summarize_serovars <- function(kma_dir, serovar_config_yaml, threshold_id, thres
     results_merged <- dplyr::bind_rows(results_new, results_old)
   }
   
-  if(!is.null(metadata_file)){
+  
+  if(file.exists(metadata_file)){
     metadata <- read_metadata(metadata_file)
     results <- merge_metadata(table = results, metadata)
   }
@@ -266,13 +264,14 @@ summarize_serovars <- function(kma_dir, serovar_config_yaml, threshold_id, thres
   message("Success!")
 }
 
-
-kma_dir <- snakemake@input[["kma_dir"]]
-threshold_id <- snakemake@params[["threshold_id"]]
-threshold_cov <- snakemake@params[["threshold_cov"]]
+assembly_results <- snakemake@input[["assembly_results"]]
+reads_results <- snakemake@input[["reads_results"]]
+threshold <- snakemake@params[["threshold"]]
 metadata_file <- snakemake@params[["metadata_file"]]
 serovar_file <- snakemake@output[["serovar_file"]]
 dbg <- snakemake@params[["debug"]]
+
+kma_files <- c(assembly_results, reads_results)
 
 logger::log_threshold(level = logger::INFO)
 if (dbg){
@@ -289,10 +288,9 @@ if (dbg){
 }
 
 summarize_serovars(
-  kma_dir = kma_dir,
+  kma_files = kma_files,
   serovar_config_yaml = "config/serovar_profiles.yaml",
-  threshold_id = threshold_id,
-  threshold_cov = threshold_cov,
+  threshold = threshold,
   metadata_file = metadata_file,
   serovar_file = serovar_file
 )
