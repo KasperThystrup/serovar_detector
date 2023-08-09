@@ -8,46 +8,47 @@ from os.path import basename
 configfile: "config/config.yaml"
 
 database = config["database"]
-sample_dir = config["sample_dir"]
+assembly_dir = config["assembly_dir"]
+reads_dir = config["reads_dir"]
 outdir = config["outdir"]
 
-threshold_id = config["threshold_id"]
-threshold_cov = config["threshold_cov"]
+threshold = config["threshold"]
 
 debug = config["debug"]
 
-mates = glob(pathname = "%s/*.fastq.gz" %sample_dir)
+if reads_dir is not None:
+	mates = glob(pathname = "%s/*.fastq.gz" %reads_dir)
+else:
+	reads_dir = list()
+	mates = list()
 
-samples = {sub("_R\d[_\d+]*.fastq.gz", "", fn) for fn in [basename(mt) for mt in mates]}
+if assembly_dir is not None:
+	assemblies = glob(pathname = "%s/*.fasta" %assembly_dir)
+else:
+	assembly_dir = list()
+	assemblies = list()
 
-if len(samples) < 1:
-	sys.exit("fastq.gz files are missing!")
+sample_reads = {sub("_R\d[_\d+]*.fastq.gz", "", fn) for fn in [basename(mt) for mt in mates]}
+sample_assemblies = {sub(".fasta", "", fn) for fn in [basename(ass) for ass in assemblies]}
+
+#species = basename(database).replace("_", " ") #
 
 metadata_file = "%s/metadata.tsv" %outdir
-if not os.path.isfile(metadata_file):
-	metadata_file = None
-
-species = basename(database).replace("_", " ") #
 
 rule all:
 	input:
-		serovar = "%s/Results/serovar.tsv" %outdir
+		serovar = "%s/serovar.tsv" %outdir
 
 
-rule init:
-        output:
-                temp("%s/init.tmp" %outdir)
-        shell:
-                "mkdir -p %s && touch {output}" %outdir
 
 
 rule metadata:
-	input:
-		rules.init.output
+	priority:
+		1
 	output:
 		metadata_file
 	run:
-		sample_list = ["Sample"] + list(samples)
+		sample_list = ["Sample"] + list(sample_reads, sample_assemblies)
 		with open(metadata_file, "w", newline = "\n") as meta_file:
 			meta_output = csv.writer(meta_file, delimiter = "\t")
 			for line in sample_list:

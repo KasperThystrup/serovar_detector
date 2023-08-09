@@ -1,2 +1,5 @@
 .snakemake/
+config/
 ignore
+stashlist.txt
+*RData
