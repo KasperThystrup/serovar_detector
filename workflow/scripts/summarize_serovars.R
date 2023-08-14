@@ -146,7 +146,7 @@ resolve_serovars <- function(kma_table, profiles){
       Sample,
       Suggested_serovar = dplyr::case_when(
         is.na(count) ~ paste(Serovar, sep = ", "),
-        count / capsule_count < 0.5 ~ NA_character_,
+        count / capsule_count < 0.5 ~ paste0("?", Serovar, collapse = ", "),
         TRUE ~ Serovar
       ),
         
@@ -168,6 +168,7 @@ resolve_serovars <- function(kma_table, profiles){
     member = any(Serovar == Suggested_serovar),
     gene_id = dplyr::case_when(
       Template_Identity == 100 ~ "",
+      Template_Identity != 100 & Template_Coverage == 100 ~ paste0(Template_Identity, "% ID"),
       TRUE ~ paste0(Template_Identity, "% ID, ")
     ),
     gene_cov = dplyr::case_when(
@@ -260,7 +261,7 @@ summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, metada
   }
   
   logger::log_info("Writing results to: ", serovar_file)
-  readr::write_tsv(x = results, file = serovar_file)
+  readr::write_tsv(x = dplyr::arrange(results, Date, Sample), file = serovar_file)
   message("Success!")
 }
 

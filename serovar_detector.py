@@ -13,9 +13,11 @@ def parse_arguments():
   parser.add_argument("-T", metavar = "--theshold", dest = "threshold", help = "Cutoff threshold of match coverage and identity. Ignore threshold by setting to 0 or False. (Default 98)", default = 98)
   parser.add_argument("-m", dest = "metadata", help = "Include or generate metadata sheet. Metadata sheet will be reads from/generated in the output directory. (Default False)", action = "store_true")
   parser.add_argument("-o", metavar = "--outdir", dest = "outdir", help = "Output path to Results and Temporary files directory", required = True)
+  parser.add_argument("-B", dest = "blacklisting", help = "Blacklist succesfsfully analysed samples, usable for surveillance / continous projects. (Default False)", action = "store_true")
   parser.add_argument("-M", dest = "multithreading", help = "Enable multithreading during kmer alignment, use for huge samples only. (Default False)", action = "store_true")
   parser.add_argument("-k", dest = "keep_config", help = "Preserve configuration file and exit pipeline for debugging purposes. (Default False)", action = "store_true")
   parser.add_argument("-t", metavar = "--threads", dest = "threads", help = "Number of threads to allocate for the pipeline. (Default 1)", default = 1)
+  parser.add_argument("-f", dest = "force_results", help = "Force rerun of the Results tasks in the pipeline. (Default False)", action = "store_true")
   parser.add_argument("-F", dest = "force", help = "Force rerun of all tasks in pipeline. (Default False)", action = "store_true")
   parser.add_argument("-S", dest = "skipmake", help = "Skip Snakemake for requirering manual run of Snakemake. Config file will be generated.", action = "store_true")
   parser.add_argument("-n", dest = "dry_run", help = "Perform a dry run with Snakemake to see jobs but without executing them. (Default False)", action = "store_true")
@@ -41,7 +43,7 @@ def validate_snakemake(debug):
     sys.exit(1)
 
 
-def generate_configfile(reads_dir, assembly_dir, database, threshold, metadata, outdir, multithreading, threads, debug, keep_config, skipmake):
+def generate_configfile(reads_dir, assembly_dir, database, threshold, metadata, outdir, blacklisting, multithreading, threads, debug, keep_config, skipmake):
   # Define config file
   config_file = "config/config.yaml"
   
@@ -62,7 +64,7 @@ def generate_configfile(reads_dir, assembly_dir, database, threshold, metadata, 
   assembly_dir_path = os.path.abspath(assembly_dir).rstrip("/")
   out_path = os.path.abspath(outdir).rstrip("/")
   
-  config = {"reads_dir" : reads_dir_path, "assembly_dir" : assembly_dir_path, "database" : database, "threshold" : threshold,  "outdir" : out_path, "multithreading" : multithreading, "debug" : debug}
+  config = {"reads_dir" : reads_dir_path, "assembly_dir" : assembly_dir_path, "database" : database, "threshold" : threshold,  "outdir" : out_path, "blacklisting" : blacklisting, "multithreading" : multithreading, "debug" : debug}
 
   with open(config_file, "w") as config_yaml:
     yaml.dump(config, config_yaml)
@@ -90,9 +92,11 @@ database = args.database
 threshold = args.threshold
 metadata = args.metadata
 outdir = args.outdir
+blacklisting = args.blacklisting
 multithreading = args.multithreading
 keep_config = args.keep_config
 threads = args.threads
+force_results = args.force_results
 force = args.force
 skipmake = args.skipmake
 dry_run = args.dry_run
@@ -102,7 +106,7 @@ debug = args.debug
 validate_snakemake(debug)
 
 # Prepare config file for snakemake
-generate_configfile(reads_dir, assembly_dir, database, threshold, metadata, outdir, multithreading, threads, debug, keep_config, skipmake)
+generate_configfile(reads_dir, assembly_dir, database, threshold, metadata, outdir, blacklisting, multithreading, threads, debug, keep_config, skipmake)
 
 # Preparing optional metadata sheet
 if metadata:
@@ -114,10 +118,14 @@ else:
   snake_args = ""
   if force:
     snake_args += " -F "
+  elif force_results:
+    snake_args += " --forcerun all "
   if dry_run:
     snake_args += " -n "
   if metadata:
-    snake_args += " all --forcerun metadata "
+    snake_args += " --forcerun metadata "
+  if blacklisting:
+    snake_args += " --forcerun blacklist "
 
   snakemake_cmd = "snakemake --use-conda --cores %s%s" %(threads, snake_args) 
   if debug:

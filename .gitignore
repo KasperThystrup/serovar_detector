@@ -3,3 +3,5 @@ config/
 ignore
 stashlist.txt
 *RData
+slurm*
+.gitignore

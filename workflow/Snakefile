@@ -1,4 +1,5 @@
 import sys
+import pandas
 import csv
 from copy import deepcopy
 from glob import glob
@@ -11,9 +12,8 @@ database = config["database"]
 assembly_dir = config["assembly_dir"]
 reads_dir = config["reads_dir"]
 outdir = config["outdir"]
-
 threshold = config["threshold"]
-
+blacklisting = config["blacklisting"]
 debug = config["debug"]
 
 if reads_dir is not None:
@@ -28,10 +28,33 @@ else:
 	assembly_dir = list()
 	assemblies = list()
 
-sample_reads = {sub("_R\d[_\d+]*.fastq.gz", "", fn) for fn in [basename(mt) for mt in mates]}
-sample_assemblies = {sub(".fasta", "", fn) for fn in [basename(ass) for ass in assemblies]}
 
-#species = basename(database).replace("_", " ") #
+sample_reads = set(sub("_R\d[_\d+]*.fastq.gz", "", fn) for fn in [basename(mt) for mt in mates])
+sample_assemblies = set(sub(".fasta", "", fn) for fn in [basename(ass) for ass in assemblies])
+
+blacklist_path = "config/blacklist.txt"
+if blacklisting:
+	
+	if debug:
+		print("Reading blacklist file: %s" %blacklist_path)
+	if os.path.isfile(blacklist_path):
+		blacklist_table = pandas.read_csv(blacklist_path)
+		blacklist = blacklist_table.loc[:, "Sample"].tolist()
+	else:
+		print("No blacklist file exists")
+		blacklist = list()
+	
+	samples_before_blacklisting = len(sample_reads) + len(sample_assemblies)
+	
+	sample_reads = set(sample for sample in sample_reads if sample not in blacklist)
+	sample_assemblies = set(sample for sample in sample_assemblies if sample not in blacklist)
+	samples_after_blacklisting = len(sample_reads) + len(sample_assemblies)	
+	print("Total samples: %s\nSamples remaining after blacklisting: %s" %(samples_before_blacklisting, samples_after_blacklisting))
+
+	if samples_after_blacklisting == 0:
+		print("No new samples detected. Aborting (This is NOT an error!!)")
+		sys.exit(0)
+	
 
 metadata_file = "%s/metadata.tsv" %outdir
 
@@ -54,6 +77,19 @@ rule metadata:
 			for line in sample_list:
 				meta_output.writerow([line])
 
+
+rule blacklist:
+	output:
+		blacklist_path
+	run:
+		header = "Sample\n"
+		if os.path.isfile(blacklist_path):
+			header = ""
+		with open(blacklist_path, "a") as blacklist_file:
+			blacklist_file.write(header)
+			blacklist_file.write("\n".join(sample_reads) + "\n")
+			blacklist_file.write("\n".join(sample_assemblies))
+			
 
 
 include: "rules/detect_serovars.smk"
