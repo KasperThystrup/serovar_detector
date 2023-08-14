@@ -35,23 +35,6 @@ read_res <- function(res_file){
 }
 
 
-read_metadata <- function(metadata_file){
-  
-  message("INFO: Reading metadata file - ", metadata_file)
-  metadata <- readr::read_tsv(file = metadata_file, show_col_types = FALSE)
-  
-  if(ncol(metadata) == 1){
-    warning("There was only one column detected in the metadata file.\n",
-            "Metadata will be ignored.")
-    metadata <- NULL
-  } else if (nrow(metadata) == 0){
-    metadata <- NULL
-  }
-  
-  return(metadata)
-}
-
-
 apply_thresholds <- function(res_table, threshold){
   logger::log_debug("Applying thresholds")
   
@@ -98,7 +81,7 @@ resolve_serovars <- function(kma_table, profiles){
   kma_dates <- dplyr::select(kma_table, Sample, Date) %>%
     dplyr::distinct()
   
-  logger::log_debug("Merging kma results with serovar profiles table.")
+  logger::log_debug("Merging kma results with serovar profiles table.") ### Warnings!!!
   kma_profile <- dplyr::select(
     kma_table, 
     Sample, Template_Gene, Template_Strain, Template_Serovar, Template_Identity,
@@ -116,7 +99,7 @@ resolve_serovars <- function(kma_table, profiles){
     .groups = "drop_last"
   ) %>%
     # Determine which serovars are best represented relative to capsule gene counts
-    dplyr::summarise(
+    dplyr::reframe(
       Serovar,
       Gene_count,
       selected = Gene_count == max(Gene_count),
@@ -125,7 +108,7 @@ resolve_serovars <- function(kma_table, profiles){
   
   logger::log_debug("Counting expected amount of capsule genes for each serovar")
   profiles_count <- dplyr::group_by(profiles, Serovar) %>%
-    dplyr::summarise(capsule_count = dplyr::n())
+    dplyr::summarise(capsule_count = dplyr::n(), .groups = "keep") ## .groups added
   
   logger::log_debug("Filtering the most repressented serovar and quantifying capsule gene frequency.")
   serovar_suggestions <- subset(kma_overview, selected) %>%
@@ -136,7 +119,8 @@ resolve_serovars <- function(kma_table, profiles){
       count = dplyr::case_when(
         suggestions != 1 ~ NA_integer_,
         TRUE ~ unique(Gene_count)
-      )
+      ),
+      .groups = "keep"
     )
   
   serovars_raw <- dplyr::left_join(
@@ -157,7 +141,7 @@ resolve_serovars <- function(kma_table, profiles){
       .groups = "keep"
     )
   
-  serovars <- dplyr::inner_join(x = serovars_raw, kma_dates) %>%
+  serovars <- dplyr::inner_join(x = serovars_raw, kma_dates, by = "Sample") %>%
     dplyr::relocate(Date, .after = Sample)
   
   kma_merged <- dplyr::left_join(kma_profile, serovars, by = "Sample") %>%
@@ -185,7 +169,7 @@ resolve_serovars <- function(kma_table, profiles){
     dplyr::arrange(class)
   
   logger::log_debug("Defining and annotating accepted gene- and partial gene-matches.")
-  kma_genes <- dplyr::summarise(
+  kma_genes <- dplyr::reframe(
     kma_detailed,
     Serovar_match = dplyr::case_when(
       member & match_perfect ~ gene_detailed,
@@ -201,9 +185,9 @@ resolve_serovars <- function(kma_table, profiles){
     ),
     Others_partial = dplyr::case_when(
       !member & match_partial ~ gene_detailed
-    ),
-    .groups = "keep"
-  )
+    )
+  ) %>%
+    dplyr::group_by(Sample)
   
   logger::log_debug("Removing NA's and compressing accepted- and partial -genes into single columns.")
   genes <- dplyr::summarise(
@@ -218,17 +202,9 @@ resolve_serovars <- function(kma_table, profiles){
   dplyr::left_join(serovars, genes, by = "Sample")
     
 }
-
-
-merge_metadata <- function(table, metadata){
-  if (is.null(metadata))
-    return(table)
-  
-  dplyr::left_join(table, metadata, by = "Sample")
-}
   
 
-summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, metadata_file, serovar_file){
+summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, serovar_file){
   logger::log_info("Reading and merging all .res files.")
   res_table <- purrr::map_dfr(kma_files, read_res)
   kma_table <- apply_thresholds(res_table, threshold)
@@ -254,12 +230,6 @@ summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, metada
     results_merged <- dplyr::bind_rows(results_new, results_old)
   }
   
-  
-  if(file.exists(metadata_file)){
-    metadata <- read_metadata(metadata_file)
-    results <- merge_metadata(table = results, metadata)
-  }
-  
   logger::log_info("Writing results to: ", serovar_file)
   readr::write_tsv(x = dplyr::arrange(results, Date, Sample), file = serovar_file)
   message("Success!")
@@ -268,7 +238,6 @@ summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, metada
 assembly_results <- snakemake@input[["assembly_results"]]
 reads_results <- snakemake@input[["reads_results"]]
 threshold <- snakemake@params[["threshold"]]
-metadata_file <- snakemake@params[["metadata_file"]]
 serovar_file <- snakemake@output[["serovar_file"]]
 dbg <- snakemake@params[["debug"]]
 
@@ -278,7 +247,7 @@ logger::log_threshold(level = logger::INFO)
 if (dbg){
   logger::log_threshold(level = logger::DEBUG)
   
-  tmp_file = file.path(
+  tmp_file <- file.path(
     dirname(serovar_file),
     "summarize_serovars.RData"
   )
@@ -292,9 +261,5 @@ summarize_serovars(
   kma_files = kma_files,
   serovar_config_yaml = "config/serovar_profiles.yaml",
   threshold = threshold,
-  metadata_file = metadata_file,
   serovar_file = serovar_file
 )
-
-
-

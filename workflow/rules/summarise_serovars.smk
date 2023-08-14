@@ -6,7 +6,6 @@ rule summarize_serovars:
 		reads_results = expand(rules.detect_reads_capsules.output.res_file, sample = sample_reads)
 	params:
 		threshold = threshold,
-		metadata_file = metadata_file,
 		debug = debug
 	output:
 		serovar_file = "%s/serovar.tsv" %outdir

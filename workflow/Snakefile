@@ -56,29 +56,23 @@ if blacklisting:
 		sys.exit(0)
 	
 
-metadata_file = "%s/metadata.tsv" %outdir
 
 rule all:
 	input:
 		serovar = "%s/serovar.tsv" %outdir
 
 
-
-
-rule metadata:
+rule clean_blacklist:
 	priority:
 		1
-	output:
-		metadata_file
-	run:
-		sample_list = ["Sample"] + list(sample_reads, sample_assemblies)
-		with open(metadata_file, "w", newline = "\n") as meta_file:
-			meta_output = csv.writer(meta_file, delimiter = "\t")
-			for line in sample_list:
-				meta_output.writerow([line])
-
+	input:
+		blacklist_path
+	shell:
+		"rm {input}"
 
 rule blacklist:
+	priority:
+		2
 	output:
 		blacklist_path
 	run:
