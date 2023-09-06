@@ -5,3 +5,4 @@ stashlist.txt
 *RData
 slurm*
 .gitignore
+*.swp

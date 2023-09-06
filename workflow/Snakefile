@@ -17,10 +17,10 @@ blacklisting = config["blacklisting"]
 debug = config["debug"]
 
 if reads_dir is not None:
-	mates = glob(pathname = "%s/*.fastq.gz" %reads_dir)
+	reads = glob(pathname = "%s/*.fastq.gz" %reads_dir)
 else:
 	reads_dir = list()
-	mates = list()
+	reads = list()
 
 if assembly_dir is not None:
 	assemblies = glob(pathname = "%s/*.fasta" %assembly_dir)
@@ -29,10 +29,10 @@ else:
 	assemblies = list()
 
 
-sample_reads = set(sub("_R\d[_\d+]*.fastq.gz", "", fn) for fn in [basename(mt) for mt in mates])
+sample_reads = set(sub("_R\d[_\d+]*.fastq.gz", "", fn) for fn in [basename(rd) for rd in reads])
 sample_assemblies = set(sub(".fasta", "", fn) for fn in [basename(ass) for ass in assemblies])
 
-blacklist_path = "config/blacklist.txt"
+blacklist_path = "config/blacklist.tsv"
 if blacklisting:
 	
 	if debug:
@@ -54,7 +54,6 @@ if blacklisting:
 	if samples_after_blacklisting == 0:
 		print("No new samples detected. Aborting (This is NOT an error!!)")
 		sys.exit(0)
-	
 
 
 rule all:
@@ -70,20 +69,6 @@ rule clean_blacklist:
 	shell:
 		"rm {input}"
 
-rule blacklist:
-	priority:
-		2
-	output:
-		blacklist_path
-	run:
-		header = "Sample\n"
-		if os.path.isfile(blacklist_path):
-			header = ""
-		with open(blacklist_path, "a") as blacklist_file:
-			blacklist_file.write(header)
-			blacklist_file.write("\n".join(sample_reads) + "\n")
-			blacklist_file.write("\n".join(sample_assemblies))
-			
 
 
 include: "rules/detect_serovars.smk"
