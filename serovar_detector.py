@@ -109,8 +109,6 @@ else:
     snake_args += " --forcerun all "
   if dry_run:
     snake_args += " -n "
-  if blacklisting:
-    snake_args += " --forcerun blacklist "
   if clean_blacklist:
     snake_args += "--forcerun clean_blacklist"
   

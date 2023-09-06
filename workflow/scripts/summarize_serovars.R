@@ -204,7 +204,7 @@ resolve_serovars <- function(kma_table, profiles){
 }
   
 
-summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, serovar_file){
+summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, blacklisting, blacklist_file, serovar_file){
   logger::log_info("Reading and merging all .res files.")
   res_table <- purrr::map_dfr(kma_files, read_res)
   kma_table <- apply_thresholds(res_table, threshold)
@@ -221,7 +221,12 @@ summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, serova
   
   logger::log_info("Determining the most frequently repressented serovars and serovar genes.")
   results <- resolve_serovars(kma_table, profiles)
- 
+  
+  if (blacklisting){
+    blacklisted_samples <- dplyr::select(results, Sample)
+    
+    readr::write_tsv(x = blacklisted_samples, file = blacklist_file)
+  }
   if (file.exists(serovar_file)){
     logger::log_info("Reading existing results")
     results_old <- readr::read_tsv(serovar_file)
@@ -238,6 +243,7 @@ summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, serova
 assembly_results <- snakemake@input[["assembly_results"]]
 reads_results <- snakemake@input[["reads_results"]]
 threshold <- snakemake@params[["threshold"]]
+blacklisting <- snakemake@params[["blacklisting"]]
 serovar_file <- snakemake@output[["serovar_file"]]
 dbg <- snakemake@params[["debug"]]
 
@@ -261,5 +267,7 @@ summarize_serovars(
   kma_files = kma_files,
   serovar_config_yaml = "config/serovar_profiles.yaml",
   threshold = threshold,
+  blacklisting = blacklisting,
+  blacklist_file = "config/blacklist.tsv",
   serovar_file = serovar_file
 )
