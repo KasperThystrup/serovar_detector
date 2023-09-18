@@ -46,3 +46,4 @@ rule detect_reads_capsules:
 		mkdir -p {output.kma_dir}
 		kma -ipe {input.mate1} {input.mate2} -o {params.prefix} -t_db {params.db} -t {threads}
 		"""
+

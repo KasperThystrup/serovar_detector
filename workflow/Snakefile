@@ -1,6 +1,7 @@
 import sys
 import pandas
 import csv
+import pathlib
 from copy import deepcopy
 from glob import glob
 from re import sub
@@ -68,7 +69,6 @@ rule clean_blacklist:
 		blacklist_path
 	shell:
 		"rm {input}"
-
 
 
 include: "rules/detect_serovars.smk"
