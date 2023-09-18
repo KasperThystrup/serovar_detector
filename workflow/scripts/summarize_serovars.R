@@ -225,6 +225,20 @@ summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, blackl
   if (blacklisting){
     blacklisted_samples <- dplyr::select(results, Sample)
     
+    if (file.exists(blacklist_file)){
+      blacklist_input <- readr::read_tsv(blacklist_file)
+    
+      blakclisted_samples <- dplyr::bind_rows(blacklist_input, blacklisted_samples)
+      
+      any_blacklist_duplicates <- dplyr::pull(blacklisted_samples, var = Sample) %>%
+        duplicated %>%
+        any
+      
+      if (any_blacklist_duplicates){
+        warning("Duplicated blacklist sampels detected. Please check the `config/blacklist.txt`")
+        blacklisted_samples <- dplyr::distinct(blacklisted_samples)
+    }
+    
     readr::write_tsv(x = blacklisted_samples, file = blacklist_file)
   }
   if (file.exists(serovar_file)){
