@@ -4,6 +4,8 @@ import sys
 import yaml
 import glob
 import subprocess
+import re
+import pandas
 
 def parse_arguments():
   parser = argparse.ArgumentParser(description = "Screen read files and assemblies for Serovar biomarker genes, in order to preovide suggestions for isolate serovar. Currently only supporting Actinobacillus Pleuropneumoniae.")
@@ -72,6 +74,114 @@ def generate_configfile(reads_dir, assembly_dir, database, threshold, outdir, bl
   with open(config_file, "w") as config_yaml:
     yaml.dump(config, config_yaml)
 
+
+def generate_subsample_sheet(reads_dir, assembly_dir):
+  
+  print("Screening assembly directory for files", end = "... ")
+  assembly_sheet = pandas.DataFrame()
+  if assembly_dir is not None and os.path.exists(assembly_dir):
+    # Screen for files
+    sample_fasta = [sample for sample in glob.glob("%s/*fasta" %assembly_dir)]
+    
+    # Generate grouped search object
+    assembly_search = [re.search("^(?P<file>\S+\/(?P<sample>\S+)\.(?P<ext>[fast]+))" , fasta_file) for fasta_file in sample_fasta]
+    
+    # Generate DataFrame from search object groups
+    assembly_sheet = pandas.DataFrame({"sample": [search.group("sample") for search in assembly_search], "file": [search.group("file") for search in assembly_search], "type": [search.group("ext") for search in assembly_search]})
+
+    print("Success: %s assembly files found" %len(sample_fasta))
+
+  # Report on screening status
+  elif assembly_dir is None:
+    print("OK: No assembly directory provided, skipping!")
+  else:
+    print("Failed: Assembly directory does not exist!\n  - %s" %assembly_dir)
+
+  print("Screening reads directory for files", end = "... ")
+  reads_sheet = pandas.DataFrame()
+  if reads_dir is not None and os.path.exists(reads_dir):
+    # Screen for files
+    sample_fastq = [sample_read for sample_read in glob.glob("%s/*fastq*" %reads_dir)]
+      
+    # Generate grouped search object
+    reads_search = [re.search("^(?P<file>\S+/(?P<sample>\S+)(_S\d+)?(_L\d+)?_(?P<mate>R[12])(_\d+)?\.(?P<ext>[fastq.gz]+))", fastq_file) for fastq_file in sample_fastq] 
+    
+    # Generate DataFrame from search object groups
+    reads_sheet = pandas.DataFrame({"sample": [search.group("sample") for search in reads_search], "mate": [search.group("mate") for search in reads_search], "file": [search.group("file") for search in reads_search], "type": [search.group("ext") for search in reads_search]})
+    
+    print("Success: %s read files found" %len(sample_fastq))
+
+  # Report on screening status
+  elif reads_dir is None:
+    print("OK: No reads directory provided, skipping!")
+  else:
+    print("Failed: Reads directory does not exist!\n  - %s" %reads_dir)
+
+  return(pandas.concat([reads_sheet, assembly_sheet], sort = True))
+
+
+def write_subsample_sheet(subsample_sheet, outdir, force):
+  subsample_file = "%s/subsample_sheet.csv" %outdir
+  subsample_exists = os.path.exists(subsample_file)
+
+  print("Writting subsample sheet", end = "... ")
+  if not subsample_exists or force:
+    subsample_sheet.to_csv(subsample_file, index = False)
+    if not force:
+      print("Success: Written to %s" %subsample_file)
+    else:
+      print("Success: Overwritting %s" %subsample_file)
+  else:
+    print("OK: File allready exists, skipping! To renew, delete/rename the old file or enable the `-f` (force) option.")
+    return(False)
+  return(True)
+
+
+def write_PEP(outdir, subsample_updated, force):
+   # Generate PEP configuration:
+  PEP_header = "pep_version: 2.1.0\n"
+  PEP_subsample = "subsample_table: '%s/subsample_sheet.csv'"
+  PEP_modifiers = """
+  sample_modifiers:
+    imply:
+      - if:
+          mate: 'R1'
+        then:
+          mate1_file: file
+      - if:
+          mate: 'R2'
+        then:
+          mate2_file: file
+      - if:
+          ext: 'fasta'
+        then:
+          assembly_file: file
+  """
+  
+  pep_file = "%s/project_config.yaml" %outdir
+  pep_exists = os.path.exists(pep_file)
+  print("Writing project configuration file", end = "... ")
+  if not pep_exists or subsample_updated or force:
+    
+    with open(pep_file, "w") as config_file:
+      config_file.write(PEP_header)
+      config_file.write(PEP_subsample)
+      config_file.write(PEP_modifiers)
+    
+    if not pep_exists:
+      print("Success: Written to %s" %pep_file)
+    elif pep_exists and subsample_updated and not force:
+      print("Success: Subsample sheet updated! Overwritting %s" %pep_file)
+    else:
+      print("Success: Overwriting %s" %pep_file)
+  else:
+    print("OK: File allready exists, skipping! To renew, delete/rename the old file or enable the `-f` (force) option.")
+    return(False)
+  
+  return(True)
+
+ 
+
 # Derrive arguments
 args = parse_arguments()
 
@@ -97,6 +207,18 @@ validate_snakemake(debug)
 # Prepare config file for snakemake
 generate_configfile(reads_dir, assembly_dir, database, threshold, outdir, blacklisting, multithreading, threads, debug, skipmake)
 
+
+# Preparing output directory
+if not os.path.exists(outdir):
+  print("Creating output directory: %s" %outdir)
+  os.mkdir(outdir)
+
+# Generate subsample sheet
+subsample_sheet = generate_subsample_sheet(reads_dir, assembly_dir)
+subsample_updated = write_subsample_sheet(subsample_sheet, outdir, force)
+
+pep_updated = write_PEP(outdir, subsample_updated, force)
+sys.exit(0)
 if skipmake:
   print("Warning: Skipping Snakemake!")
 else:
