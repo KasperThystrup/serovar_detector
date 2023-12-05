@@ -67,9 +67,10 @@ def generate_configfile(reads_dir, assembly_dir, database, threshold, outdir, bl
     assembly_dir_path = os.path.abspath(assembly_dir).rstrip("/")
   else:
     assembly_dir_path = ""
+
   out_path = os.path.abspath(outdir).rstrip("/")
   
-  config = {"reads_dir" : reads_dir_path, "assembly_dir" : assembly_dir_path, "database" : database, "threshold" : threshold,  "outdir" : out_path, "blacklisting" : blacklisting, "multithreading" : multithreading, "debug" : debug}
+  config = {"database" : database, "threshold" : threshold,  "outdir" : out_path, "blacklisting" : blacklisting, "multithreading" : multithreading, "debug" : debug}
 
   with open(config_file, "w") as config_yaml:
     yaml.dump(config, config_yaml)
@@ -78,19 +79,20 @@ def generate_configfile(reads_dir, assembly_dir, database, threshold, outdir, bl
 def generate_subsample_sheet(reads_dir, assembly_dir):
   
   print("Screening assembly directory for files", end = "... ")
-  assembly_sheet = pandas.DataFrame()
+  assembly_sheet = pandas.DataFrame(columns = ["sample_name", "type", "file"])
+
   if assembly_dir is not None and os.path.exists(assembly_dir):
     # Screen for files
     sample_fasta = [sample for sample in glob.glob("%s/*fasta" %assembly_dir)]
     
     # Generate grouped search object
-    assembly_search = [re.search("^(?P<file>\S+\/(?P<sample>\S+)\.(?P<ext>[fast]+))" , fasta_file) for fasta_file in sample_fasta]
+    assembly_search = [re.search("^(?P<file>\S+\/(?P<sample_name>\S+)\.(?P<ext>[fast]+))" , fasta_file) for fasta_file in sample_fasta]
     
     # Generate DataFrame from search object groups
-    assembly_sheet = pandas.DataFrame({"sample": [search.group("sample") for search in assembly_search], "file": [search.group("file") for search in assembly_search], "type": [search.group("ext") for search in assembly_search]})
+    assembly_raw = pandas.DataFrame({"sample_name": [search.group("sample_name") for search in assembly_search], "file": [search.group("file") for search in assembly_search], "type": [search.group("ext") for search in assembly_search]})
+    assembly_sheet = assembly_raw.sort_values(by = "sample_name")
 
     print("Success: %s assembly files found" %len(sample_fasta))
-
   # Report on screening status
   elif assembly_dir is None:
     print("OK: No assembly directory provided, skipping!")
@@ -98,73 +100,118 @@ def generate_subsample_sheet(reads_dir, assembly_dir):
     print("Failed: Assembly directory does not exist!\n  - %s" %assembly_dir)
 
   print("Screening reads directory for files", end = "... ")
-  reads_sheet = pandas.DataFrame()
+  reads_sheet = pandas.DataFrame(columns = ["sample_name", "mate", "type", "file"])
+  
   if reads_dir is not None and os.path.exists(reads_dir):
     # Screen for files
     sample_fastq = [sample_read for sample_read in glob.glob("%s/*fastq*" %reads_dir)]
       
     # Generate grouped search object
-    reads_search = [re.search("^(?P<file>\S+/(?P<sample>\S+)(_S\d+)?(_L\d+)?_(?P<mate>R[12])(_\d+)?\.(?P<ext>[fastq.gz]+))", fastq_file) for fastq_file in sample_fastq] 
+    reads_search = [re.search("^(?P<file>\S+/(?P<sample_name>\S+?)(?:_S\d+)?(?:_L\d+)?_(?P<mate>R[12])(?:_\d+)?\.(?P<ext>fastq\.gz))", fastq_file) for fastq_file in sample_fastq] 
     
     # Generate DataFrame from search object groups
-    reads_sheet = pandas.DataFrame({"sample": [search.group("sample") for search in reads_search], "mate": [search.group("mate") for search in reads_search], "file": [search.group("file") for search in reads_search], "type": [search.group("ext") for search in reads_search]})
-    
-    print("Success: %s read files found" %len(sample_fastq))
+    reads_raw = pandas.DataFrame({"sample_name": [search.group("sample_name") for search in reads_search], "mate": [search.group("mate") for search in reads_search], "file": [search.group("file") for search in reads_search], "type": [search.group("ext") for search in reads_search]})
+    reads_sheet = reads_raw.sort_values(by = ["sample_name", "mate"])
 
+    print("Success: %s read files found" %len(sample_fastq))
   # Report on screening status
   elif reads_dir is None:
     print("OK: No reads directory provided, skipping!")
   else:
     print("Failed: Reads directory does not exist!\n  - %s" %reads_dir)
 
-  return(pandas.concat([reads_sheet, assembly_sheet], sort = True))
+  subsample_concattenated = pandas.concat([reads_sheet, assembly_sheet], sort = False)
+  subsample_sorted = subsample_concattenated.sort_values(by = ["type", "sample_name"], ascending=False)
+
+  return(subsample_sorted[["sample_name", "mate", "type", "file"]])
 
 
-def write_subsample_sheet(subsample_sheet, outdir, force):
-  subsample_file = "%s/subsample_sheet.csv" %outdir
+def generate_sample_sheet(subsample_sheet):
+  print("Generating sample sheet", end = "... ")
+
+  file_count = len(subsample_sheet.index)
+  
+  if file_count > 0:
+    sample_subset = subsample_sheet[["sample_name"]]
+    sample_unduplicated = sample_subset.drop_duplicates()
+    sample_sheet = sample_unduplicated.assign(assembly = "assembly_file", read1 = "read1_file", read2 = "read2_file", kma = "kma_dir")
+    print("Success: A total of %s samples have been annotated!" %len(sample_sheet.index))
+    return(sample_sheet)
+  else:
+    print("Failed: Subsample sheet has no rows")
+    return(False)
+
+
+def write_subsample_sheet(subsample_sheet, force):
+  subsample_file = "schemas/subsample_sheet.csv"
   subsample_exists = os.path.exists(subsample_file)
 
   print("Writting subsample sheet", end = "... ")
   if not subsample_exists or force:
     subsample_sheet.to_csv(subsample_file, index = False)
+
     if not force:
       print("Success: Written to %s" %subsample_file)
     else:
       print("Success: Overwritting %s" %subsample_file)
+
   else:
     print("OK: File allready exists, skipping! To renew, delete/rename the old file or enable the `-f` (force) option.")
     return(False)
+
   return(True)
 
 
-def write_PEP(outdir, subsample_updated, force):
+def write_sample_sheet(sample_sheet, force):
+  sample_file = "schemas/sample_sheet.csv"
+  sample_exists = os.path.exists(sample_file)
+
+  print("Writting sample sheet", end = "... ")
+  if not sample_exists or force:
+    sample_sheet.to_csv(sample_file, index = False)
+    if not force:
+      print("Success: Written to %s" %sample_file)
+    else:
+      print("Success: Overwirtting %s" %sample_file)
+  else:
+    print("OK: File allready exists, skipping! To renew, delete/rename the old file or enable the `-f` (force) option.")
+    return(False)
+
+  return(True)
+
+
+def write_PEP(subsample_updated, outdir, force):
    # Generate PEP configuration:
   PEP_header = "pep_version: 2.1.0\n"
-  PEP_subsample = "subsample_table: '%s/subsample_sheet.csv'"
+  PEP_sample = "sample_table: 'sample_sheet.csv'\n"
+  PEP_subsample = "subsample_table: 'subsample_sheet.csv'"
   PEP_modifiers = """
-  sample_modifiers:
-    imply:
-      - if:
-          mate: 'R1'
-        then:
-          mate1_file: file
-      - if:
-          mate: 'R2'
-        then:
-          mate2_file: file
-      - if:
-          ext: 'fasta'
-        then:
-          assembly_file: file
-  """
+sample_modifiers:
+  imply:
+    - if:
+        mate: 'R1'
+      then:
+        mate1_file: file
+    - if:
+        mate: 'R2'
+      then:
+        mate2_file: file
+    - if:
+        ext: 'fasta'
+      then:
+        assembly_file: file
+  append:
+    kma_out: %s/kma/{sample_name}
+""" %outdir
   
-  pep_file = "%s/project_config.yaml" %outdir
+  pep_file = "schemas/project_config.yaml"
   pep_exists = os.path.exists(pep_file)
   print("Writing project configuration file", end = "... ")
   if not pep_exists or subsample_updated or force:
     
     with open(pep_file, "w") as config_file:
       config_file.write(PEP_header)
+      config_file.write(PEP_sample)
       config_file.write(PEP_subsample)
       config_file.write(PEP_modifiers)
     
@@ -209,15 +256,17 @@ generate_configfile(reads_dir, assembly_dir, database, threshold, outdir, blackl
 
 
 # Preparing output directory
-if not os.path.exists(outdir):
-  print("Creating output directory: %s" %outdir)
-  os.mkdir(outdir)
+if not os.path.exists("schemas"):
+  print("Creating PEP directory:")
+  os.mkdir("schemas")
 
 # Generate subsample sheet
 subsample_sheet = generate_subsample_sheet(reads_dir, assembly_dir)
-subsample_updated = write_subsample_sheet(subsample_sheet, outdir, force)
+sample_sheet = generate_sample_sheet(subsample_sheet)
+subsample_updated = write_subsample_sheet(subsample_sheet, force)
+sample_updated = write_sample_sheet(sample_sheet, force)
 
-pep_updated = write_PEP(outdir, subsample_updated, force)
+pep_updated = write_PEP(subsample_updated, outdir, force)
 sys.exit(0)
 if skipmake:
   print("Warning: Skipping Snakemake!")
