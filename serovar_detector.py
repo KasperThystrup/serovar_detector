@@ -70,7 +70,10 @@ def generate_configfile(reads_dir, assembly_dir, database, threshold, outdir, bl
 
   out_path = os.path.abspath(outdir).rstrip("/")
   
-  config = {"database" : database, "threshold" : threshold,  "outdir" : out_path, "blacklisting" : blacklisting, "multithreading" : multithreading, "debug" : debug}
+  config = {
+    "database": database, "threshold": threshold,  "outdir": out_path,
+    "blacklisting": blacklisting, "multithreading": multithreading, "debug": debug
+  }
 
   with open(config_file, "w") as config_yaml:
     yaml.dump(config, config_yaml)
@@ -79,17 +82,25 @@ def generate_configfile(reads_dir, assembly_dir, database, threshold, outdir, bl
 def generate_subsample_sheet(reads_dir, assembly_dir):
   
   print("Screening assembly directory for files", end = "... ")
-  assembly_sheet = pandas.DataFrame(columns = ["sample_name", "type", "file"])
+  assembly_sheet = pandas.DataFrame(columns = ["sample_name", "file", "ext"])
 
   if assembly_dir is not None and os.path.exists(assembly_dir):
     # Screen for files
     sample_fasta = [sample for sample in glob.glob("%s/*fasta" %assembly_dir)]
     
     # Generate grouped search object
-    assembly_search = [re.search("^(?P<file>\S+\/(?P<sample_name>\S+)\.(?P<ext>[fast]+))" , fasta_file) for fasta_file in sample_fasta]
+    assembly_search = [
+      re.search(
+        "^(?P<file>\S+\/(?P<sample_name>\S+)\.(?P<ext>[fast]+))" , fasta_file
+      ) for fasta_file in sample_fasta
+    ]
     
     # Generate DataFrame from search object groups
-    assembly_raw = pandas.DataFrame({"sample_name": [search.group("sample_name") for search in assembly_search], "file": [search.group("file") for search in assembly_search], "type": [search.group("ext") for search in assembly_search]})
+    assembly_raw = pandas.DataFrame({
+      "sample_name": [search.group("sample_name") for search in assembly_search],
+      "file": [search.group("file") for search in assembly_search],
+      "ext": [search.group("ext") for search in assembly_search]
+    })
     assembly_sheet = assembly_raw.sort_values(by = "sample_name")
 
     print("Success: %s assembly files found" %len(sample_fasta))
@@ -100,17 +111,27 @@ def generate_subsample_sheet(reads_dir, assembly_dir):
     print("Failed: Assembly directory does not exist!\n  - %s" %assembly_dir)
 
   print("Screening reads directory for files", end = "... ")
-  reads_sheet = pandas.DataFrame(columns = ["sample_name", "mate", "type", "file"])
+  reads_sheet = pandas.DataFrame(columns = ["sample_name", "mate", "file", "ext"])
   
   if reads_dir is not None and os.path.exists(reads_dir):
     # Screen for files
     sample_fastq = [sample_read for sample_read in glob.glob("%s/*fastq*" %reads_dir)]
       
     # Generate grouped search object
-    reads_search = [re.search("^(?P<file>\S+/(?P<sample_name>\S+?)(?:_S\d+)?(?:_L\d+)?_(?P<mate>R[12])(?:_\d+)?\.(?P<ext>fastq\.gz))", fastq_file) for fastq_file in sample_fastq] 
+    reads_search = [
+      re.search(
+        "^(?P<file>\S+/(?P<sample_name>\S+?)(?:_S\d+)?(?:_L\d+)?_(?P<mate>R[12])(?:_\d+)?\.(?P<ext>fastq\.gz))",
+        fastq_file
+      ) for fastq_file in sample_fastq
+    ] 
     
     # Generate DataFrame from search object groups
-    reads_raw = pandas.DataFrame({"sample_name": [search.group("sample_name") for search in reads_search], "mate": [search.group("mate") for search in reads_search], "file": [search.group("file") for search in reads_search], "type": [search.group("ext") for search in reads_search]})
+    reads_raw = pandas.DataFrame({
+      "sample_name": [search.group("sample_name") for search in reads_search],
+      "mate": [search.group("mate") for search in reads_search],
+      "file": [search.group("file") for search in reads_search],
+      "ext": [search.group("ext") for search in reads_search]
+    })
     reads_sheet = reads_raw.sort_values(by = ["sample_name", "mate"])
 
     print("Success: %s read files found" %len(sample_fastq))
@@ -121,9 +142,9 @@ def generate_subsample_sheet(reads_dir, assembly_dir):
     print("Failed: Reads directory does not exist!\n  - %s" %reads_dir)
 
   subsample_concattenated = pandas.concat([reads_sheet, assembly_sheet], sort = False)
-  subsample_sorted = subsample_concattenated.sort_values(by = ["type", "sample_name"], ascending=False)
+  subsample_sorted = subsample_concattenated.sort_values(by = ["ext", "sample_name"], ascending=False)
 
-  return(subsample_sorted[["sample_name", "mate", "type", "file"]])
+  return(subsample_sorted[["sample_name", "mate", "file", "ext"]])
 
 
 def generate_sample_sheet(subsample_sheet):
@@ -133,8 +154,8 @@ def generate_sample_sheet(subsample_sheet):
   
   if file_count > 0:
     sample_subset = subsample_sheet[["sample_name"]]
-    sample_unduplicated = sample_subset.drop_duplicates()
-    sample_sheet = sample_unduplicated.assign(assembly = "assembly_file", read1 = "read1_file", read2 = "read2_file", kma = "kma_dir")
+    sample_sheet = sample_subset.drop_duplicates()
+
     print("Success: A total of %s samples have been annotated!" %len(sample_sheet.index))
     return(sample_sheet)
   else:
@@ -189,20 +210,14 @@ def write_PEP(subsample_updated, outdir, force):
 sample_modifiers:
   imply:
     - if:
-        mate: 'R1'
+        ext: ["fastq.gz", "fastq.gz"]
       then:
-        mate1_file: file
+        type: "reads"
     - if:
-        mate: 'R2'
+        ext: "fasta"
       then:
-        mate2_file: file
-    - if:
-        ext: 'fasta'
-      then:
-        assembly_file: file
-  append:
-    kma_out: %s/kma/{sample_name}
-""" %outdir
+        type: "assembly"
+"""
   
   pep_file = "schemas/project_config.yaml"
   pep_exists = os.path.exists(pep_file)

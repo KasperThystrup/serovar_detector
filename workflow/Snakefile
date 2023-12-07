@@ -8,67 +8,74 @@ from re import sub
 from os.path import basename
 
 configfile: "config/config.yaml"
+pepfile: "schemas/project_config.yaml"
 
 database = config["database"]
-assembly_dir = config["assembly_dir"]
-reads_dir = config["reads_dir"]
+#assembly_dir = config["assembly_dir"]
+#reads_dir = config["reads_dir"]
 outdir = config["outdir"]
 threshold = config["threshold"]
 blacklisting = config["blacklisting"]
 debug = config["debug"]
 
-if reads_dir is not None:
-	reads = glob(pathname = "%s/*.fastq.gz" %reads_dir)
-else:
-	reads_dir = list()
-	reads = list()
+sample_sheet = pep.sample_table
 
-if assembly_dir is not None:
-	assemblies = glob(pathname = "%s/*.fasta" %assembly_dir)
-else:
-	assembly_dir = list()
-	assemblies = list()
+#assembly_sheet = sample_sheet[
+
+print(sample_sheet)
+
+#if reads_dir is not None:
+#	reads = glob(pathname = "%s/*.fastq.gz" %reads_dir)
+#else:
+#	reads_dir = list()
+#	reads = list()
+#
+#if assembly_dir is not None:
+#	assemblies = glob(pathname = "%s/*.fasta" %assembly_dir)
+#else:
+#	assembly_dir = list()
+#	assemblies = list()
 
 
-sample_reads = set(sub("_R\d[_\d+]*.fastq.gz", "", fn) for fn in [basename(rd) for rd in reads])
-sample_assemblies = set(sub(".fasta", "", fn) for fn in [basename(ass) for ass in assemblies])
+#sample_reads = set(sub("_R\d[_\d+]*.fastq.gz", "", fn) for fn in [basename(rd) for rd in reads])
+#sample_assemblies = set(sub(".fasta", "", fn) for fn in [basename(ass) for ass in assemblies])
 
-blacklist_path = "config/blacklist.tsv"
-if blacklisting:
-	
-	if debug:
-		print("Reading blacklist file: %s" %blacklist_path)
-	if os.path.isfile(blacklist_path):
-		blacklist_table = pandas.read_csv(blacklist_path)
-		blacklist = blacklist_table.loc[:, "Sample"].tolist()
-	else:
-		print("No blacklist file exists")
-		blacklist = list()
-	
-	samples_before_blacklisting = len(sample_reads) + len(sample_assemblies)
-	
-	sample_reads = set(sample for sample in sample_reads if sample not in blacklist)
-	sample_assemblies = set(sample for sample in sample_assemblies if sample not in blacklist)
-	samples_after_blacklisting = len(sample_reads) + len(sample_assemblies)	
-	print("Total samples: %s\nSamples remaining after blacklisting: %s" %(samples_before_blacklisting, samples_after_blacklisting))
-
-	if samples_after_blacklisting == 0:
-		print("No new samples detected. Aborting (This is NOT an error!!)")
-		sys.exit(0)
-
+#blacklist_path = "config/blacklist.tsv"
+#if blacklisting:
+#	
+#	if debug:
+#		print("Reading blacklist file: %s" %blacklist_path)
+#	if os.path.isfile(blacklist_path):
+#		blacklist_table = pandas.read_csv(blacklist_path)
+#		blacklist = blacklist_table.loc[:, "Sample"].tolist()
+#	else:
+#		print("No blacklist file exists")
+#		blacklist = list()
+#	
+#	samples_before_blacklisting = len(sample_reads) + len(sample_assemblies)
+#	
+#	sample_reads = set(sample for sample in sample_reads if sample not in blacklist)
+#	sample_assemblies = set(sample for sample in sample_assemblies if sample not in blacklist)
+#	samples_after_blacklisting = len(sample_reads) + len(sample_assemblies)	
+#	print("Total samples: %s\nSamples remaining after blacklisting: %s" %(samples_before_blacklisting, samples_after_blacklisting))
+#
+#	if samples_after_blacklisting == 0:
+#		print("No new samples detected. Aborting (This is NOT an error!!)")
+#		sys.exit(0)
+#
 
 rule all:
 	input:
 		serovar = "%s/serovar.tsv" %outdir
 
 
-rule clean_blacklist:
-	priority:
-		1
-	input:
-		blacklist_path
-	shell:
-		"rm {input}"
+#rule clean_blacklist:
+#	priority:
+#		1
+#	input:
+#		blacklist_path
+#	shell:
+#		"rm {input}"
 
 
 include: "rules/detect_serovars.smk"
