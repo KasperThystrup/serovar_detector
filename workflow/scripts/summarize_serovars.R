@@ -240,6 +240,7 @@ summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, blackl
     }
     
     readr::write_tsv(x = blacklisted_samples, file = blacklist_file)
+    }
   }
   if (file.exists(serovar_file)){
     logger::log_info("Reading existing results")
