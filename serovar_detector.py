@@ -120,7 +120,8 @@ def generate_subsample_sheet(reads_dir, assembly_dir):
     # Generate grouped search object
     reads_search = [
       re.search(
-        "^(?P<file>\S+/(?P<sample_name>\S+?)(?:_S\d+)?(?:_L\d+)?_(?P<mate>R[12])(?:_\d+)?\.(?P<ext>fastq\.gz))",
+        "^(?P<file>\S+\/(?P<sample_name>\S+?)((_S\d+)?(_L\d+)?)?_(?P<mate>[Rr]?[12])(_\d{3})?\.(?P<ext>((fastq)?(fq)?)?(\.gz)?))"
+        #^(?P<file>\S+/(?P<sample_name>\S+?)(?:_S\d+)?(?:_L\d+)?_(?P<mate>R[12])(?:_\d+)?\.(?P<ext>fastq\.gz))",
         fastq_file
       ) for fastq_file in sample_fastq
     ] 
