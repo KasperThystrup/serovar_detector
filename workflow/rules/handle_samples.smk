@@ -5,7 +5,7 @@ rule link_assemblies:
         assembly="%s/tmp/{sample}.fasta" % outdir
     shell:
         """
-        ln -s {input.assembly} {output.assembly}
+        ln -s '{input.assembly}' '{output.assembly}'
         """
 
 
@@ -18,7 +18,7 @@ rule link_reads:
         mate2="%s/tmp/{sample}_R2.fastq.gz" % outdir
     shell:
         """
-        ln -s {input.mate1} {output.mate1}
-        ln -s {input.mate2} {output.mate2}
+        ln -s '{input.mate1}' '{output.mate1}'
+        ln -s '{input.mate2}' '{output.mate2}'
         """
 

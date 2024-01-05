@@ -19,8 +19,8 @@ def parse_arguments():
   parser.add_argument("-M", dest = "multithreading", help = "Enable multithreading during kmer alignment, use for huge samples only. (Default False)", action = "store_true")
   parser.add_argument("-k", dest = "keep", help = "Preserve temporary files such as KMA result files. (Default False)", action = "store_true")
   parser.add_argument("-t", metavar = "--threads", dest = "threads", help = "Number of threads to allocate for the pipeline. (Default 1)", default = 1)
-  parser.add_argument("-f", dest = "force_results", help = "Force rerun of the Results tasks in the pipeline. (Default False)", action = "store_true")
-  parser.add_argument("-F", dest = "force", help = "Force rerun of all tasks in pipeline. (Default False)", action = "store_true")
+  parser.add_argument("-f", dest = "force", help = "Force rerun of all tasks in pipeline. (Default False)", action = "store_true")
+  parser.add_argument("-F", dest = "force_results", help = "Force rerun of the Results tasks in the pipeline. (Default False)", action = "store_true")
   parser.add_argument("-S", dest = "skipmake", help = "Skip Snakemake for requirering manual run of Snakemake. Config file will be generated.", action = "store_true")
   parser.add_argument("-n", dest = "dry_run", help = "Perform a dry run with Snakemake to see jobs but without executing them. (Default False)", action = "store_true")
   parser.add_argument("-d", dest = "debug", help = "Enable debug mode, stores snakemake object for inspection in R. (Default False)", action = "store_true")
@@ -45,7 +45,7 @@ def validate_snakemake(debug):
     sys.exit(1)
 
 
-def generate_configfile(reads_dir, assembly_dir, database, threshold, outdir, blacklisting, multithreading, threads, debug, skipmake):
+def generate_configfile(database, threshold, outdir, blacklisting, multithreading, threads, debug, skipmake):
   # Define config file
   config_file = "config/config.yaml"
   
@@ -58,16 +58,6 @@ def generate_configfile(reads_dir, assembly_dir, database, threshold, outdir, bl
       print("No config dir detected, creating directory.")
       os.mkdir(config_dir)
 
-  # Directing full paths
-  if reads_dir is not None:
-    reads_dir_path = os.path.abspath(reads_dir).rstrip("/")
-  else:
-    reads_dir_path = ""
-  if assembly_dir is not None:
-    assembly_dir_path = os.path.abspath(assembly_dir).rstrip("/")
-  else:
-    assembly_dir_path = ""
-
   out_path = os.path.abspath(outdir).rstrip("/")
   
   config = {
@@ -79,89 +69,90 @@ def generate_configfile(reads_dir, assembly_dir, database, threshold, outdir, bl
     yaml.dump(config, config_yaml)
 
 
-def generate_subsample_sheet(reads_dir, assembly_dir):
-  
-  print("Screening assembly directory for files", end = "... ")
-  assembly_sheet = pandas.DataFrame(columns = ["sample_name", "file", "ext"])
-
-  if assembly_dir is not None and os.path.exists(assembly_dir):
+def make_table(directory, type):
+  if type == "Reads":
     # Screen for files
-    sample_fasta = [sample for sample in glob.glob("%s/*fasta" %assembly_dir)]
-    
-    # Generate grouped search object
-    assembly_search = [
-      re.search(
-        "^(?P<file>\S+\/(?P<sample_name>\S+)\.(?P<ext>[fast]+))" , fasta_file
-      ) for fasta_file in sample_fasta
-    ]
-    
+    fastqs = [sample_read for sample_read in glob.glob("%s/*.fastq*" %directory)]
+    fqs = [sample_read for sample_read in glob.glob("%s/*.fq*" %directory)]
+
+    # Combine file lists
+    read_files = fastqs + fqs
+
+    # Search file names for metadata
+    pattern = "^(?P<file>\S+\/(?P<sample_name>\S+?)((_S\d+)?(_L\d+)?)?_(?P<mate>[Rr]?[12])(_\d{3})?\.(?P<ext>((fastq)?(fq)?)?(\.gz)?))"
+    search = [re.search(pattern, read_file) for read_file in read_files]
+
     # Generate DataFrame from search object groups
-    assembly_raw = pandas.DataFrame({
-      "sample_name": [search.group("sample_name") for search in assembly_search],
-      "file": [search.group("file") for search in assembly_search],
-      "ext": [search.group("ext") for search in assembly_search]
+    table_raw = pandas.DataFrame({
+      "sample_name": [search.group("sample_name") for search in search],
+      "mate": [search.group("mate") for search in search],
+      "file": [search.group("file") for search in search],
+      "type": type
+    #  "ext": [search.group("ext") for search in reads_search]
     })
-    assembly_sheet = assembly_raw.sort_values(by = "sample_name")
+    
+    # Sort table
+    table = table_raw.sort_values(by = ["sample_name", "mate"])
 
-    print("Success: %s assembly files found" %len(sample_fasta))
-  # Report on screening status
-  elif assembly_dir is None:
-    print("OK: No assembly directory provided, skipping!")
-  else:
-    print("Failed: Assembly directory does not exist!\n  - %s" %assembly_dir)
-
-  print("Screening reads directory for files", end = "... ")
-  reads_sheet = pandas.DataFrame(columns = ["sample_name", "mate", "file", "ext"])
-  
-  if reads_dir is not None and os.path.exists(reads_dir):
+  elif type == "Assembly":
     # Screen for files
-    sample_fastq = [sample_read for sample_read in glob.glob("%s/*fastq*" %reads_dir)]
-      
-    # Generate grouped search object
-    reads_search = [
-      re.search(
-        "^(?P<file>\S+\/(?P<sample_name>\S+?)((_S\d+)?(_L\d+)?)?_(?P<mate>[Rr]?[12])(_\d{3})?\.(?P<ext>((fastq)?(fq)?)?(\.gz)?))"
-        #^(?P<file>\S+/(?P<sample_name>\S+?)(?:_S\d+)?(?:_L\d+)?_(?P<mate>R[12])(?:_\d+)?\.(?P<ext>fastq\.gz))",
-        fastq_file
-      ) for fastq_file in sample_fastq
-    ] 
-    
+    fastas = [sample_assembly for sample_assembly in glob.glob("%s/*.fasta*" %directory)]
+    fas = [sample_assembly for sample_assembly in glob.glob("%s/*.fa*" %directory)]
+
+    # Combine file lists
+    assembly_files = fastas + fas
+
+    # Search file names for metadata
+    pattern = "^(?P<file>\S+\/(?P<sample_name>\S+)\.(?P<ext>[fast]+))"
+    search = [re.search(pattern, assembly_file) for assembly_file in assembly_files]
+
     # Generate DataFrame from search object groups
-    reads_raw = pandas.DataFrame({
-      "sample_name": [search.group("sample_name") for search in reads_search],
-      "mate": [search.group("mate") for search in reads_search],
-      "file": [search.group("file") for search in reads_search],
-      "ext": [search.group("ext") for search in reads_search]
+    table_raw = pandas.DataFrame({
+      "sample_name": [search.group("sample_name") for search in search],
+      "file": [search.group("file") for search in search],
+      "type": type
+      #"ext": [search.group("ext") for search in assembly_search]
     })
-    reads_sheet = reads_raw.sort_values(by = ["sample_name", "mate"])
 
-    print("Success: %s read files found" %len(sample_fastq))
-  # Report on screening status
-  elif reads_dir is None:
-    print("OK: No reads directory provided, skipping!")
+    table = table_raw.sort_values(by = "sample_name")
   else:
-    print("Failed: Reads directory does not exist!\n  - %s" %reads_dir)
+    return(pandas.DataFrame({"sample_name", "mate", "file", "type"}))
 
-  subsample_concattenated = pandas.concat([reads_sheet, assembly_sheet], sort = False)
-  subsample_sorted = subsample_concattenated.sort_values(by = ["ext", "sample_name"], ascending=False)
-
-  return(subsample_sorted[["sample_name", "mate", "file", "ext"]])
+  return(table)
 
 
-def generate_sample_sheet(subsample_sheet):
+def make_sample_sheet(table):
   print("Generating sample sheet", end = "... ")
 
-  file_count = len(subsample_sheet.index)
+  file_count = len(table.index)
   
   if file_count > 0:
-    sample_subset = subsample_sheet[["sample_name"]]
+    sample_subset = table[["sample_name", "type"]]
     sample_sheet = sample_subset.drop_duplicates()
-
-    print("Success: A total of %s samples have been annotated!" %len(sample_sheet.index))
-    return(sample_sheet)
   else:
     print("Failed: Subsample sheet has no rows")
+    sample_sheet = False
+
+  print("Success: A total of %s samples have been annotated!" %len(sample_sheet.index))
+  return(sample_sheet)
+
+
+def write_sample_sheet(sample_sheet, force):
+  sample_file = "schemas/sample_sheet.csv"
+  sample_exists = os.path.exists(sample_file)
+
+  print("Writting sample sheet", end = "... ")
+  if not sample_exists or force:
+    sample_sheet.to_csv(sample_file, index = False)
+    if not force:
+      print("Success: Written to %s" %sample_file)
+    else:
+      print("Success: Overwirtting %s" %sample_file)
+  else:
+    print("OK: File allready exists, skipping! To renew, delete/rename the old file or enable the `-f` (force) option.")
     return(False)
+
+  return(True)
 
 
 def write_subsample_sheet(subsample_sheet, force):
@@ -184,22 +175,20 @@ def write_subsample_sheet(subsample_sheet, force):
   return(True)
 
 
-def write_sample_sheet(sample_sheet, force):
-  sample_file = "schemas/sample_sheet.csv"
-  sample_exists = os.path.exists(sample_file)
+def generate_sheets(reads_dir, assembly_dir, force):
+  reads_table = make_table(directory = reads_dir, type = "Reads")
+  assembly_table = make_table(directory = assembly_dir, type = "Assembly")
 
-  print("Writting sample sheet", end = "... ")
-  if not sample_exists or force:
-    sample_sheet.to_csv(sample_file, index = False)
-    if not force:
-      print("Success: Written to %s" %sample_file)
-    else:
-      print("Success: Overwirtting %s" %sample_file)
-  else:
-    print("OK: File allready exists, skipping! To renew, delete/rename the old file or enable the `-f` (force) option.")
-    return(False)
+  table = pandas.concat([reads_table, assembly_table])
 
-  return(True)
+  sample_sheet = make_sample_sheet(table)
+  sample_sheet_updated = write_sample_sheet(sample_sheet, force)
+
+  subsample_sheet = table[["sample_name", "mate", "file"]]
+  subsample_sheet_updated = write_subsample_sheet(subsample_sheet, force)
+
+  sheets_updated = any([sample_sheet_updated, subsample_sheet_updated])
+  return(sheets_updated)
 
 
 def write_PEP(subsample_updated, outdir, force):
@@ -207,18 +196,6 @@ def write_PEP(subsample_updated, outdir, force):
   PEP_header = "pep_version: 2.1.0\n"
   PEP_sample = "sample_table: 'sample_sheet.csv'\n"
   PEP_subsample = "subsample_table: 'subsample_sheet.csv'"
-  PEP_modifiers = """
-sample_modifiers:
-  imply:
-    - if:
-        ext: ["fastq.gz", "fastq.gz"]
-      then:
-        type: "reads"
-    - if:
-        ext: "fasta"
-      then:
-        type: "assembly"
-"""
   
   pep_file = "schemas/project_config.yaml"
   pep_exists = os.path.exists(pep_file)
@@ -229,7 +206,6 @@ sample_modifiers:
       config_file.write(PEP_header)
       config_file.write(PEP_sample)
       config_file.write(PEP_subsample)
-      config_file.write(PEP_modifiers)
     
     if not pep_exists:
       print("Success: Written to %s" %pep_file)
@@ -243,7 +219,6 @@ sample_modifiers:
   
   return(True)
 
- 
 
 # Derrive arguments
 args = parse_arguments()
@@ -268,8 +243,7 @@ debug = args.debug
 validate_snakemake(debug)
 
 # Prepare config file for snakemake
-generate_configfile(reads_dir, assembly_dir, database, threshold, outdir, blacklisting, multithreading, threads, debug, skipmake)
-
+generate_configfile(database, threshold, outdir, blacklisting, multithreading, threads, debug, skipmake)
 
 # Preparing output directory
 if not os.path.exists("schemas"):
@@ -277,13 +251,13 @@ if not os.path.exists("schemas"):
   os.mkdir("schemas")
 
 # Generate subsample sheet
-subsample_sheet = generate_subsample_sheet(reads_dir, assembly_dir)
-sample_sheet = generate_sample_sheet(subsample_sheet)
-subsample_updated = write_subsample_sheet(subsample_sheet, force)
-sample_updated = write_sample_sheet(sample_sheet, force)
+sheets_updated = generate_sheets(reads_dir, assembly_dir, force)
+#subsample_sheet = generate_subsample_sheet(reads_dir, assembly_dir)
+#sample_sheet = generate_sample_sheet(subsample_sheet)
+#subsample_updated = write_subsample_sheet(subsample_sheet, force)
+#sample_updated = write_sample_sheet(sample_sheet, force)
 
-pep_updated = write_PEP(subsample_updated, outdir, force)
-sys.exit(0)
+pep_updated = write_PEP(sheets_updated, outdir, force)
 if skipmake:
   print("Warning: Skipping Snakemake!")
 else:
