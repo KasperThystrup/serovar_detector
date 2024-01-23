@@ -25,8 +25,8 @@ rule detect_assembly_capsules:
 
 rule detect_reads_capsules:
   input:
-    mate1 = "%s/reads/{sample}_R1.fastq.gz" %outdir,
-    mate2 = "%s/reads/{sample}_R2.fastq.gz" %outdir
+    mate1 = "%s/{sample}/{sample}_R1.fastq.gz" %outdir,
+    mate2 = "%s/{sample}/{sample}_R2.fastq.gz" %outdir
   params:
     db = database,
     prefix = "%s/{sample}/kma/{sample}" %outdir
