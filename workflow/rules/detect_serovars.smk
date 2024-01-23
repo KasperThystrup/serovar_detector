@@ -1,12 +1,12 @@
 rule detect_assembly_capsules:
   input:
-    assembly_file = rules.link_assemblies.output.assembly
+    assembly_file = "%s/{sample}/{sample}.fasta" %outdir
   params:
     db = database,
-    prefix = lambda wildcards: assembly_seet.loc[wildcards.sample, "sample"]
+    prefix =  "%s/{sample}/kma/{sample}" %outdir
   output:
-    kma_dir = temp(directory("%s/kma/{sample}/" %outdir)),
-    res_file = "%s/kma/{sample}/{sample}.res" %outdir
+    kma_dir = directory("%s/{sample}/kma" %outdir),
+    res_file = "%s/{sample}/kma/{sample}.res" %outdir
   conda:
     "../envs/kma.yaml"
   threads:
@@ -25,14 +25,14 @@ rule detect_assembly_capsules:
 
 rule detect_reads_capsules:
   input:
-    mate1 = rules.link_reads.output.mate1,
-    mate2 = rules.link_reads.output.mate2
+    mate1 = "%s/reads/{sample}_R1.fastq.gz" %outdir,
+    mate2 = "%s/reads/{sample}_R2.fastq.gz" %outdir
   params:
     db = database,
-    prefix = lambda wildcards: reads_sheet.loc[wildcards.sample, "sample"]
+    prefix = "%s/{sample}/kma/{sample}" %outdir
   output:
-    kma_dir = temp(directory("%s/kma/{sample}/" %outdir)),
-    res_file = "%s/kma/{sample}/{sample}.res" %outdir
+    kma_dir = directory("%s/{sample}/kma" %outdir),
+    res_file = "%s/{sample}/kma/{sample}.res" %outdir
   conda:
     "../envs/kma.yaml"
   threads:
