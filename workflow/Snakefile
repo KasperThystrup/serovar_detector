@@ -26,9 +26,11 @@ rule all:
 
 rule link_reads:
   output:
-    sample_dir =  temp(directory(expand("%s/{sample}" %outdir, sample = reads_sheet["sample_name"].values.tolist()))),
+    sample_dir =  directory(expand("%s/{sample}" %outdir, sample = reads_sheet["sample_name"].values.tolist())),
     link1 = expand("%s/{sample}/{sample}_R1.fastq.gz" %outdir, sample = reads_sheet["sample_name"].values.tolist()),
     link2 = expand("%s/{sample}/{sample}_R2.fastq.gz" %outdir, sample = reads_sheet["sample_name"].values.tolist())
+  priority:
+    1
   log:
     "%s/logs/link_reads.log" %outdir
   run:
@@ -59,9 +61,12 @@ rule link_reads:
 
 rule link_assemblies:
   output:
-    sample_dir = temp(directory(expand("%s/{sample}" %outdir, sample = assembly_sheet["sample_name"].values.tolist()))),
+    sample_dir = directory(expand("%s/{sample}" %outdir, sample = assembly_sheet["sample_name"].values.tolist())),
     link = expand("%s/{sample}/{sample}.fasta" %outdir, sample = assembly_sheet["sample_name"].values.tolist())
-  log: "%s/logs/link_assemblies.log" %outdir
+  priority:
+    1
+  log:
+    "%s/logs/link_assemblies.log" %outdir
   run:
     # Extract all assembly files
     assemblies = assembly_sheet["file"].values.tolist()
