@@ -96,8 +96,8 @@ def make_table(directory, type):
 
   elif type == "Assembly":
     # Screen for files
-    fastas = [sample_assembly for sample_assembly in glob.glob("%s/*.fasta*" %directory)]
-    fas = [sample_assembly for sample_assembly in glob.glob("%s/*.fa*" %directory)]
+    fastas = [sample_assembly for sample_assembly in glob.glob("%s/*.fasta" %directory)]
+    fas = [sample_assembly for sample_assembly in glob.glob("%s/*.fa" %directory)]
 
     # Combine file lists
     assembly_files = fastas + fas
@@ -252,10 +252,6 @@ if not os.path.exists("schemas"):
 
 # Generate subsample sheet
 sheets_updated = generate_sheets(reads_dir, assembly_dir, force)
-#subsample_sheet = generate_subsample_sheet(reads_dir, assembly_dir)
-#sample_sheet = generate_sample_sheet(subsample_sheet)
-#subsample_updated = write_subsample_sheet(subsample_sheet, force)
-#sample_updated = write_sample_sheet(sample_sheet, force)
 
 pep_updated = write_PEP(sheets_updated, outdir, force)
 if skipmake:
