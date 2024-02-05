@@ -69,7 +69,7 @@ def generate_configfile(database, threshold, outdir, blacklisting, multithreadin
     yaml.dump(config, config_yaml)
 
 
-def make_table(directory, type):
+def screen_files(directory, type):
   if type == "Reads":
     # Screen for files
     fastqs = [sample_read for sample_read in glob.glob("%s/*.fastq*" %directory)]
@@ -83,17 +83,16 @@ def make_table(directory, type):
     search = [re.search(pattern, read_file) for read_file in read_files]
 
     # Generate DataFrame from search object groups
-    table_raw = pandas.DataFrame({
+    metadata_raw = pandas.DataFrame({
       "sample_name": [search.group("sample_name") for search in search],
       "mate": [search.group("mate") for search in search],
       "file": [search.group("file") for search in search],
       "type": type
-    #  "ext": [search.group("ext") for search in reads_search]
     })
     
     # Sort table
-    table = table_raw.sort_values(by = ["sample_name", "mate"])
-
+    metadata = metadata_raw.sort_values(by = ["sample_name", "mate"])
+ 
   elif type == "Assembly":
     # Screen for files
     fastas = [sample_assembly for sample_assembly in glob.glob("%s/*.fasta" %directory)]
@@ -107,18 +106,49 @@ def make_table(directory, type):
     search = [re.search(pattern, assembly_file) for assembly_file in assembly_files]
 
     # Generate DataFrame from search object groups
-    table_raw = pandas.DataFrame({
+    metadata_raw = pandas.DataFrame({
       "sample_name": [search.group("sample_name") for search in search],
       "file": [search.group("file") for search in search],
       "type": type
-      #"ext": [search.group("ext") for search in assembly_search]
     })
 
-    table = table_raw.sort_values(by = "sample_name")
+    # Sort table
+    metadata = metadata_raw.sort_values(by = "sample_name")
+
   else:
     return(pandas.DataFrame({"sample_name", "mate", "file", "type"}))
+  
+  return(metadata) #file_metadata
 
-  return(table)
+
+def create_symlinks(metadata, outdir):
+  # Iterating voer each row
+  for row in range(len(metadata.index)):  
+    # Extracting sample information
+    sample_metadata = metadata.loc[row]
+    sample_name = sample_metadata["sample_name"]
+
+    # Ensuring outdir exists
+    os.makedirs(name = "outdir/[sample_name}", exist_ok = True)
+ 
+    # Generate link filenames
+    if sample_metadata["type"] == "Reads":
+      # Defining input and output
+      mate = sample_metadata["mate"]
+      sample_file = sample_metadata["file"]
+      sample_link = f"{outdir}/{sample_name}_{mate}.fastq.gz"
+
+    else:
+      # Defining input and output  
+      sample_file = sample_metadata["file"]
+      sample_link = f"{outdir}/{sample_name}.fasta"
+
+    # Symlinking file
+    if not os.path.isfile(sample_link):
+      os.symlink(src = sample_file, dst = sample_link)
+
+  print("Files successfully linked!")
+  return True
 
 
 def make_sample_sheet(table):
@@ -175,16 +205,23 @@ def write_subsample_sheet(subsample_sheet, force):
   return(True)
 
 
-def generate_sheets(reads_dir, assembly_dir, force):
-  reads_table = make_table(directory = reads_dir, type = "Reads")
-  assembly_table = make_table(directory = assembly_dir, type = "Assembly")
+def generate_sheets(reads_dir, assembly_dir, outdir, force): ## Rename this!! add outdir to call!!
+  # Generating outdir
+  os.makedirs(outdir, exist_ok=True)
 
-  table = pandas.concat([reads_table, assembly_table])
+  # Screening input files
+  reads_metadata = screen_files(directory = reads_dir, type = "Reads")
+  assembly_metadata = screen_files(directory = assembly_dir, type = "Assembly")
 
-  sample_sheet = make_sample_sheet(table)
+  metadata = pandas.concat([reads_metadata, assembly_metadata], ignore_index = True)
+
+  # Generate symlinks
+  create_symlinks(metadata, outdir)
+
+  sample_sheet = make_sample_sheet(metadata)
   sample_sheet_updated = write_sample_sheet(sample_sheet, force)
 
-  subsample_sheet = table[["sample_name", "mate", "file"]]
+  subsample_sheet = metadata[["sample_name", "mate", "file"]]
   subsample_sheet_updated = write_subsample_sheet(subsample_sheet, force)
 
   sheets_updated = any([sample_sheet_updated, subsample_sheet_updated])
@@ -251,7 +288,7 @@ if not os.path.exists("schemas"):
   os.mkdir("schemas")
 
 # Generate subsample sheet
-sheets_updated = generate_sheets(reads_dir, assembly_dir, force)
+sheets_updated = generate_sheets(reads_dir, assembly_dir, outdir, force)
 
 pep_updated = write_PEP(sheets_updated, outdir, force)
 if skipmake:
