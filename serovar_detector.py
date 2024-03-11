@@ -6,6 +6,7 @@ import glob
 import subprocess
 import re
 import pandas
+import shutil
 
 def parse_arguments():
   parser = argparse.ArgumentParser(description = "Screen read files and assemblies for Serovar biomarker genes, in order to preovide suggestions for isolate serovar. Currently only supporting Actinobacillus Pleuropneumoniae.")
@@ -15,9 +16,10 @@ def parse_arguments():
   parser.add_argument("-T", metavar = "--theshold", dest = "threshold", help = "Cutoff threshold of match coverage and identity. Ignore threshold by setting to 0 or False. (Default 98)", default = 98)
   parser.add_argument("-o", metavar = "--outdir", dest = "outdir", help = "Output path to Results and Temporary files directory", required = True)
   parser.add_argument("-b", dest = "blacklisting", help = "Blacklist succesfsfully analysed samples, usable for surveillance / continous projects. (Default False)", action = "store_true")
-  parser.add_argument("-B", dest = "clean_blacklist", help = "Remove existing blacklist file. (Default False)", action = "store_true")
+#  parser.add_argument("-B", dest = "clean_blacklist", help = "Remove existing blacklist file. (Default False)", action = "store_true")
   parser.add_argument("-M", dest = "multithreading", help = "Enable multithreading during kmer alignment, use for huge samples only. (Default False)", action = "store_true")
-  parser.add_argument("-k", dest = "keep", help = "Preserve temporary files such as KMA result files. (Default False)", action = "store_true")
+  parser.add_argument("-A", dest = "keep_all", help = "Preserve temporary files such as KMA result files. (Default False)", action = "store_true")
+  parser.add_argument("-C", dest = "keep_configs", help = "Preserve configuration files and sample_sheets. (Default False)", action = "store_true")
   parser.add_argument("-t", metavar = "--threads", dest = "threads", help = "Number of threads to allocate for the pipeline. (Default 1)", default = 1)
   parser.add_argument("-f", dest = "force", help = "Force rerun of all tasks in pipeline. (Default False)", action = "store_true")
   parser.add_argument("-F", dest = "force_results", help = "Force rerun of the Results tasks in the pipeline. (Default False)", action = "store_true")
@@ -128,20 +130,24 @@ def create_symlinks(metadata, outdir):
     sample_metadata = metadata.loc[row]
     sample_name = sample_metadata["sample_name"]
 
-    # Ensuring outdir exists
-    os.makedirs(name = "outdir/[sample_name}", exist_ok = True)
- 
+
     # Generate link filenames
     if sample_metadata["type"] == "Reads":
+      # Ensuring outdir exists
+      os.makedirs(name = f"{outdir}/reads", exist_ok = True)
+
       # Defining input and output
       mate = sample_metadata["mate"]
       sample_file = sample_metadata["file"]
-      sample_link = f"{outdir}/{sample_name}_{mate}.fastq.gz"
+      sample_link = f"{outdir}/reads/{sample_name}_{mate}.fastq.gz"
 
     else:
+      # Ensuring outdir exists
+      os.makedirs(name = f"{outdir}/assemblies", exist_ok = True)
+
       # Defining input and output  
       sample_file = sample_metadata["file"]
-      sample_link = f"{outdir}/{sample_name}.fasta"
+      sample_link = f"{outdir}/assemblies/{sample_name}.fasta"
 
     # Symlinking file
     if not os.path.isfile(sample_link):
@@ -167,45 +173,45 @@ def make_sample_sheet(table):
   return(sample_sheet)
 
 
-def write_sample_sheet(sample_sheet, force):
+def write_sample_sheet(sample_sheet, keep):
   sample_file = "schemas/sample_sheet.csv"
   sample_exists = os.path.exists(sample_file)
 
   print("Writting sample sheet", end = "... ")
-  if not sample_exists or force:
+  if not sample_exists or not keep:
     sample_sheet.to_csv(sample_file, index = False)
-    if not force:
-      print("Success: Written to %s" %sample_file)
+    if sample_exists:
+      print("Success: Overwritting %s" %sample_file)
     else:
-      print("Success: Overwirtting %s" %sample_file)
+      print("Success: Written to %s" %sample_file)
   else:
-    print("OK: File allready exists, skipping! To renew, delete/rename the old file or enable the `-f` (force) option.")
+    print("OK: File allready exists, skipping! Disable the keep_configs ´-C´ to avoid this.")
     return(False)
 
   return(True)
 
 
-def write_subsample_sheet(subsample_sheet, force):
+def write_subsample_sheet(subsample_sheet, keep):
   subsample_file = "schemas/subsample_sheet.csv"
   subsample_exists = os.path.exists(subsample_file)
 
   print("Writting subsample sheet", end = "... ")
-  if not subsample_exists or force:
+  if not subsample_exists or not keep:
     subsample_sheet.to_csv(subsample_file, index = False)
 
-    if not force:
-      print("Success: Written to %s" %subsample_file)
-    else:
+    if subsample_exists:
       print("Success: Overwritting %s" %subsample_file)
+    else:
+      print("Success: Written to %s" %subsample_file)
 
   else:
-    print("OK: File allready exists, skipping! To renew, delete/rename the old file or enable the `-f` (force) option.")
+    print("OK: File allready exists, skipping! Disable the keep_configs ´-C´ to avoid this.")
     return(False)
 
   return(True)
 
 
-def generate_sheets(reads_dir, assembly_dir, outdir, force): ## Rename this!! add outdir to call!!
+def generate_sheets(reads_dir, assembly_dir, outdir, keep): ## Rename this!! add outdir to call!!
   # Generating outdir
   os.makedirs(outdir, exist_ok=True)
 
@@ -219,39 +225,42 @@ def generate_sheets(reads_dir, assembly_dir, outdir, force): ## Rename this!! ad
   create_symlinks(metadata, outdir)
 
   sample_sheet = make_sample_sheet(metadata)
-  sample_sheet_updated = write_sample_sheet(sample_sheet, force)
+  sample_sheet_updated = write_sample_sheet(sample_sheet, keep = keep)
 
   subsample_sheet = metadata[["sample_name", "mate", "file"]]
-  subsample_sheet_updated = write_subsample_sheet(subsample_sheet, force)
+  subsample_sheet_updated = write_subsample_sheet(subsample_sheet, keep = keep)
 
   sheets_updated = any([sample_sheet_updated, subsample_sheet_updated])
   return(sheets_updated)
 
 
-def write_PEP(subsample_updated, outdir, force):
-   # Generate PEP configuration:
-  PEP_header = "pep_version: 2.1.0\n"
-  PEP_sample = "sample_table: 'sample_sheet.csv'\n"
-  PEP_subsample = "subsample_table: 'subsample_sheet.csv'"
-  
+def write_PEP(subsample_updated, outdir, keep):
+  # Define pep files
   pep_file = "schemas/project_config.yaml"
   pep_exists = os.path.exists(pep_file)
-  print("Writing project configuration file", end = "... ")
-  if not pep_exists or subsample_updated or force:
+  
+  if not pep_exists or not keep:
+    # Generate PEP configuration:
+    PEP_header = "pep_version: 2.1.0\n"
+    PEP_sample = "sample_table: 'sample_sheet.csv'\n"
+    PEP_subsample = "subsample_table: 'subsample_sheet.csv'"
+  
+    print("Writing project configuration file", end = "... ")
+    if pep_exists or subsample_updated:
     
-    with open(pep_file, "w") as config_file:
-      config_file.write(PEP_header)
-      config_file.write(PEP_sample)
-      config_file.write(PEP_subsample)
+      with open(pep_file, "w") as config_file:
+        config_file.write(PEP_header)
+        config_file.write(PEP_sample)
+        config_file.write(PEP_subsample)
     
-    if not pep_exists:
-      print("Success: Written to %s" %pep_file)
-    elif pep_exists and subsample_updated and not force:
-      print("Success: Subsample sheet updated! Overwritting %s" %pep_file)
-    else:
-      print("Success: Overwriting %s" %pep_file)
+      if not pep_exists:
+        print("Success: Written to %s" %pep_file)
+      elif pep_exists and subsample_updated:
+        print("Success: Subsample sheet updated! Overwritting %s" %pep_file)
+      else:
+        print("Success: Overwriting %s" %pep_file)
   else:
-    print("OK: File allready exists, skipping! To renew, delete/rename the old file or enable the `-f` (force) option.")
+    print("OK: File allready exists, skipping! Disable the keep_configs ´-C´ to avoid this.")
     return(False)
   
   return(True)
@@ -266,9 +275,10 @@ database = args.database
 threshold = args.threshold
 outdir = args.outdir
 blacklisting = args.blacklisting
-clean_blacklist = args.clean_blacklist
+#clean_blacklist = args.clean_blacklist
 multithreading = args.multithreading
-keep = args.keep
+keep_all = args.keep_all
+keep_configs = args.keep_configs
 threads = args.threads
 force_results = args.force_results
 force = args.force
@@ -282,20 +292,21 @@ validate_snakemake(debug)
 # Prepare config file for snakemake
 generate_configfile(database, threshold, outdir, blacklisting, multithreading, threads, debug, skipmake)
 
-# Preparing output directory
+# Generate subsample sheet
+sheets_updated = generate_sheets(reads_dir, assembly_dir, outdir, keep = keep_configs)
+
+# Preparaing PEP directory
 if not os.path.exists("schemas"):
   print("Creating PEP directory:")
   os.mkdir("schemas")
 
-# Generate subsample sheet
-sheets_updated = generate_sheets(reads_dir, assembly_dir, outdir, force)
+pep_updated = write_PEP(sheets_updated, outdir, keep_configs)
 
-pep_updated = write_PEP(sheets_updated, outdir, force)
 if skipmake:
   print("Warning: Skipping Snakemake!")
 else:
   snake_args = ""
-  if keep:
+  if keep_all:
     snake_args += " --notemp "
   if force:
     snake_args += " -F "
@@ -303,8 +314,8 @@ else:
     snake_args += " --forcerun all "
   if dry_run:
     snake_args += " -n "
-  if clean_blacklist:
-    snake_args += "--forcerun clean_blacklist"
+#  if clean_blacklist:
+#    snake_args += "--forcerun clean_blacklist"
   
 
   snakemake_cmd = "snakemake --use-conda --cores %s%s" %(threads, snake_args) 
@@ -313,3 +324,6 @@ else:
 
   subprocess.Popen(snakemake_cmd, shell = True).wait()
 
+print("Removing symlink folders")
+shutil.rmtree(f"{outdir}/reads")
+shutil.rmtree(f"{outdir}/assemblies")

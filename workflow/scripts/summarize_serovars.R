@@ -88,7 +88,7 @@ resolve_serovars <- function(kma_table, profiles){
     Template_Coverage, match_perfect, match_imperfect, match_partial
   ) %>%
     dplyr::left_join(
-      y = profiles, by = c("Template_Gene" = "Gene")
+      y = profiles, by = c("Template_Gene" = "Gene"), relationship = "many-to-many"
     ) %>%
     dplyr::group_by(Sample, Serovar)
   
