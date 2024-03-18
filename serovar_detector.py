@@ -8,26 +8,6 @@ import re
 import pandas
 import shutil
 
-def parse_arguments():
-  parser = argparse.ArgumentParser(description = "Screen read files and assemblies for Serovar biomarker genes, in order to preovide suggestions for isolate serovar. Currently only supporting Actinobacillus Pleuropneumoniae.")
-  parser.add_argument("-r", metavar = "--reads_dir", dest = "reads_dir", help = "Input path to reads directory", required = False)
-  parser.add_argument("-a", metavar = "--assembly_dir", dest = "assembly_dir", help = "Input path to assembly directory", required = False)
-  parser.add_argument("-D", metavar = "--database", dest = "database", help = "Path and prefix to kmer-aligner database", required = True)
-  parser.add_argument("-T", metavar = "--theshold", dest = "threshold", help = "Cutoff threshold of match coverage and identity. Ignore threshold by setting to 0 or False. (Default 98)", default = 98)
-  parser.add_argument("-o", metavar = "--outdir", dest = "outdir", help = "Output path to Results and Temporary files directory", required = True)
-  parser.add_argument("-b", dest = "blacklisting", help = "Blacklist succesfsfully analysed samples, usable for surveillance / continous projects. (Default False)", action = "store_true")
-  parser.add_argument("-B", dest = "clean_blacklisting", help = "Remove existing blacklist file. (Default False)", action = "store_true")
-  parser.add_argument("-m", dest = "multithreading", help = "Enable multithreading during kmer alignment, use for huge samples only. (Default False)", action = "store_true")
-  parser.add_argument("-k", dest = "keep_tmp", help = "Preserve temporary files such as KMA result files. (Default False)", action = "store_true")
-  parser.add_argument("-c", dest = "keep_configs", help = "Preserve configuration files and sample_sheets. (Default False)", action = "store_true")
-  parser.add_argument("-t", metavar = "--threads", dest = "threads", help = "Number of threads to allocate for the pipeline. (Default 3)", default = 3)
-  parser.add_argument("-F", dest = "force", help = "Force rerun of all tasks in pipeline. (Default False)", action = "store_true")
-  parser.add_argument("-f", dest = "force_results", help = "Force rerun of the Results task only. (Default False)", action = "store_true")
-  parser.add_argument("-S", dest = "skipmake", help = "Skip Snakemake for requirering manual run of Snakemake. Config file will be generated.", action = "store_true")
-  parser.add_argument("-n", dest = "dry_run", help = "Perform a dry run with Snakemake to see jobs but without executing them. (Default False)", action = "store_true")
-  parser.add_argument("-d", dest = "debug", help = "Enable debug mode, stores snakemake object for inspection in R. (Default False)", action = "store_true")
-
-  return(parser.parse_args())
 
 
 def validate_snakemake(debug):
@@ -47,7 +27,7 @@ def validate_snakemake(debug):
     sys.exit(1)
 
 
-def generate_configfile(database, threshold, outdir, tmpdir, multithreading, threads, debug, skipmake):
+def generate_configfile(database, outdir, threshold, append_results, threads, debug, tmpdir):   ### Prune
   # Define config file
   config_file = "config/config.yaml"
   
@@ -63,8 +43,8 @@ def generate_configfile(database, threshold, outdir, tmpdir, multithreading, thr
   out_path = os.path.abspath(outdir).rstrip("/")
   
   config = {
-    "database": database, "threshold": threshold,  "outdir": out_path, "tmpdir": tmpdir,
-    "multithreading": multithreading, "debug": debug
+    "database": database, "outdir": out_path, "threshold": threshold,
+    "append_results": append_results, "threads": threads, "debug": debug
   }
 
   with open(config_file, "w") as config_yaml:
@@ -172,71 +152,54 @@ def make_sample_sheet(table):
   return(sample_sheet)
 
 
-def write_sample_sheet(sample_sheet, pepdir, keep):
+def write_sample_sheet(sample_sheet, pepdir):
   sample_file = f"{pepdir}/sample_sheet.csv"
   sample_exists = os.path.exists(sample_file)
 
   print("Writting sample sheet", end = "... ")
-  if not sample_exists or not keep:
-    sample_sheet.to_csv(sample_file, index = False)
-    if sample_exists:
-      print("Success: Overwritting %s" %sample_file)
-    else:
-      print("Success: Written to %s" %sample_file)
+  sample_sheet.to_csv(sample_file, index = False)
+  if sample_exists:
+    print("Success: Overwritting %s" %sample_file)
   else:
-    print("OK: File allready exists, skipping! Disable the keep_configs ´-C´ to avoid this.")
-    return(False)
+    print("Success: Written to %s" %sample_file)
+    
 
-  return(True)
-
-
-def write_subsample_sheet(subsample_sheet, pepdir, keep):
+def write_subsample_sheet(subsample_sheet, pepdir):
   subsample_file = f"{pepdir}/subsample_sheet.csv"
   subsample_exists = os.path.exists(subsample_file)
 
   print("Writting subsample sheet", end = "... ")
-  if not subsample_exists or not keep:
-    subsample_sheet.to_csv(subsample_file, index = False)
+  subsample_sheet.to_csv(subsample_file, index = False)
 
-    if subsample_exists:
-      print("Success: Overwritting %s" %subsample_file)
-    else:
-      print("Success: Written to %s" %subsample_file)
-
+  if subsample_exists:
+    print("Success: Overwritting %s" %subsample_file)
   else:
-    print("OK: File allready exists, skipping! Disable the keep_configs ´-C´ to avoid this.")
-    return(False)
-
-  return(True)
+    print("Success: Written to %s" %subsample_file)
 
 
-def write_PEP(pepdir, keep):
+def write_PEP(pepdir):
   # Define pep files
   pep_file = f"{pepdir}/project_config.yaml"
   pep_exists = os.path.exists(pep_file)
   
-  if not pep_exists or not keep:
-    # Generate PEP configuration:
-    PEP_header = "pep_version: 2.1.0\n"
-    PEP_sample = "sample_table: 'sample_sheet.csv'\n"
-    PEP_subsample = "subsample_table: 'subsample_sheet.csv'"
-  
-    print("Writing project configuration file", end = "... ")
-    with open(pep_file, "w") as config_file:
-      config_file.write(PEP_header)
-      config_file.write(PEP_sample)
-      config_file.write(PEP_subsample)
+  # Generate PEP configuration:
+  PEP_header = "pep_version: 2.1.0\n"
+  PEP_sample = "sample_table: 'sample_sheet.csv'\n"
+  PEP_subsample = "subsample_table: 'subsample_sheet.csv'"
+ 
+  print("Writing project configuration file", end = "... ")
+  with open(pep_file, "w") as config_file:
+    config_file.write(PEP_header)
+    config_file.write(PEP_sample)
+    config_file.write(PEP_subsample)
     
-    if not pep_exists:
-      print("Success: Written to %s" %pep_file)
-    elif pep_exists:
-      print("Success: Overwriting %s" %pep_file)
-      
-  else:
-    print("Warning: File allready exists, skipping! Disable the keep_configs ´-C´ to avoid this.")
+  if not pep_exists:
+    print("Success: Written to %s" %pep_file)
+  elif pep_exists:
+    print("Success: Overwriting %s" %pep_file)
   
 
-def generate_sheets(reads_dir, assembly_dir, blacklisting, blacklist_file, outdir, tmpdir, keep):
+def generate_sheets(reads_dir, assembly_dir, blacklist_update, blacklist_clean, outdir, blacklist_file, tmpdir):
   # Generating dirs
   os.makedirs(outdir, exist_ok=True)
   os.makedirs(tmpdir, exist_ok=True)
@@ -249,13 +212,18 @@ def generate_sheets(reads_dir, assembly_dir, blacklisting, blacklist_file, outdi
 
   # Inspect blacklist if enabled
   blacklist_exists = os.path.exists(blacklist_file)  
-  if blacklisting and blacklist_exists:
+  if blacklist_exists and not blacklist_clean:
+    print("Blacklist file detected.")
+    if not blacklist_update:
+        print("Warning: Blacklist file WILL be included but will NOT be updated with current samples!")
 
     blacklist = pandas.read_csv(blacklist_file, sep = "\t")
     exclude_samples = blacklist["file"].values
   
     # Filter metadata
     metadata = metadata[~metadata["file"].isin(exclude_samples)].reset_index()
+  elif blacklist_exists and blacklist_clean:
+    print("Blacklist file detected, but will be ignored and overwritten with samples of current run!"
   
   # Ensuring not all samples have been filtered out
   sample_size = len(metadata.index)
@@ -272,31 +240,69 @@ def generate_sheets(reads_dir, assembly_dir, blacklisting, blacklist_file, outdi
       os.makedirs(pepdir, exist_ok = True) 
 
     sample_sheet = make_sample_sheet(metadata)
-    sample_sheet_updated = write_sample_sheet(sample_sheet, pepdir, keep = keep)
+    sample_sheet_updated = write_sample_sheet(sample_sheet, pepdir)
 
     subsample_sheet = metadata[["sample_name", "mate", "file"]]
-    subsample_sheet_updated = write_subsample_sheet(subsample_sheet, pepdir, keep = keep)
+    subsample_sheet_updated = write_subsample_sheet(subsample_sheet, pepdir)
     sample_files = metadata['file']
 
     # Generate PEP configuration files.
-    write_PEP(pepdir, keep)
+    write_PEP(pepdir)--OB
   else:
-    print("No new samples detected after blacklisting.")
+    print("No new samples detected after blacklist_update.")
     sample_files = []
 
   return(sample_files)
 
 
-def update_blacklist(blacklisting, blacklist_file, clean, sample_files):
+def update_blacklist(blacklist_update, blacklist_file, clean, sample_files):
   blacklist_exists = os.path.isfile(blacklist_file)
 
-  if blacklisting and clean or not blacklist_exists:
+  if clean: 
+    if blacklist_exists:
+      print("Overwriting preexisting blacklist file")
+    else:
+      print("Created new blacklist file")
+
     sample_files.to_csv(blacklist_file, sep = "\t", index=False)
-    return(True)
-  elif blacklisting:
+
+  elif blacklist_update:
+    if blacklist_exists:
+      print("Appending to existing blacklist file")
+    else:
+      print("Created new blacklist file")
+    
     sample_files.to_csv(blacklist_file, sep = "\t", index=False, mode = "a", header = False)
-  
-  return(False)
+  else:
+    print("Blacklist will not be generated, run with --blacklisting or --blacklist_clean")
+    return(False)
+
+  return(True)
+
+
+
+##TODO: Add keep_results flag.
+###> Default FALSE
+###> TRUE: summarise_serovar_mode = append:> append=file.exists('serovar.tsv'))
+
+def parse_arguments():
+  parser = argparse.ArgumentParser(description = "Screen read files and assemblies for Serovar biomarker genes, in order to preovide suggestions for isolate serovar. Currently only supporting Actinobacillus Pleuropneumoniae.")
+  parser.add_argument("-r", metavar = "--reads_dir", dest = "reads_dir", help = "Input path to reads directory", required = False)
+  parser.add_argument("-a", metavar = "--assembly_dir", dest = "assembly_dir", help = "Input path to assembly directory", required = False)
+  parser.add_argument("-D", metavar = "--database", dest = "database", help = "Path and prefix to kmer-aligner database", required = True)
+  parser.add_argument("-o", metavar = "--outdir", dest = "outdir", help = "Output path to Results and Temporary files directory", required = True)
+  parser.add_argument("-T", metavar = "--theshold", dest = "threshold", help = "Cutoff threshold of match coverage and identity. Ignore threshold by setting to 0 or False. (Default 98)", default = 98)
+  parser.add_argument("-R", dest = "append_results", help = "Append to existing results file. (Default False)", action = "store_true")
+  parser.add_argument("-b", dest = "blacklist_update", help = "Update existing blacklist file with new samples. Creates a blacklist file if non exists. (Default False)", action = "store_true")
+  parser.add_argument("-B", dest = "blacklist_clean", help = "Ignore and overwrite existing blacklist file. Creates a blacklist if non exists. (Default False)", action = "store_true")
+  parser.add_argument("-k", dest = "keep_tmp", help = "Preserve temporary files such as KMA result files. (Default False)", action = "store_true")
+  parser.add_argument("-t", metavar = "--threads", dest = "threads", help = "Number of threads to allocate for the pipeline. (Default 3)", default = 3)
+  parser.add_argument("-F", dest = "force", help = "Force rerun of all tasks in pipeline. (Default False)", action = "store_true")
+  parser.add_argument("-f", dest = "force_results", help = "Force rerun of the Results task only. (Default False)", action = "store_true")
+  parser.add_argument("-n", dest = "dry_run", help = "Perform a dry run with Snakemake to see jobs but without executing them. (Default False)", action = "store_true")
+  parser.add_argument("-d", dest = "debug", help = "Enable debug mode, stores snakemake object for inspection in R. (Default False)", action = "store_true")
+
+  return(parser.parse_args())
 
 
 # Derrive arguments
@@ -305,17 +311,15 @@ args = parse_arguments()
 reads_dir = args.reads_dir
 assembly_dir = args.assembly_dir
 database = args.database
-threshold = args.threshold
 outdir = args.outdir
-blacklisting = args.blacklisting
-clean_blacklisting = args.clean_blacklisting
-multithreading = args.multithreading
+threshold = args.threshold
+append_results = args.append_results
+blacklist_update = args.blacklist_update
+blacklist_clean = args.blacklist_clean
 keep_tmp = args.keep_tmp
-keep_configs = args.keep_configs
 threads = args.threads
 force_results = args.force_results
 force = args.force
-skipmake = args.skipmake
 dry_run = args.dry_run
 debug = args.debug
 tmpdir = f"{outdir}/tmp"
@@ -324,19 +328,20 @@ blacklist_file = f"{outdir}/blacklist.tsv"
 # Validate snakemake structure
 validate_snakemake(debug)
 
+if blacklist_update and blacklist_clean and os.path.isfile(blacklist_file):
+  print("Blacklist file detected, in addition blacklist update and blacklist clean options has been selected. Don't know which to chose, please decide to either update existing blacklist ('-b') or make a clean blacklist ('-B'), not both!"
+
 # Prepare config file for snakemake
-generate_configfile(database, threshold, outdir, tmpdir, multithreading, threads, debug, skipmake)
+generate_configfile(database, outdir, threshold, append_results, threads, debug, tmpdir)   ### Prune
 
 # Generate subsample sheet
-sample_files = generate_sheets(reads_dir, assembly_dir, blacklisting, blacklist_file, outdir, tmpdir, keep = keep_configs)
+sample_files = generate_sheets(reads_dir, assembly_dir, outdir, tmpdir, blacklist_file)   ### Prune
 
 if len(sample_files) == 0:
   print("Nothing to do exitting!")
   sys.exit(0)
 
-if skipmake:
-  print("Setup finished.\nWarning: Skipping Snakemake. To run the pipeline don't use the -S flag!")
-else:
+if:
   snake_args = ""
   if force:
     snake_args += " -F "
@@ -351,7 +356,7 @@ else:
 
   subprocess.Popen(snakemake_cmd, shell = True).wait() #check_call() Try except CalledProcessError
 
-  update_blacklist(blacklisting, blacklist_file, clean_blacklisting, sample_files)
+  update_blacklist(blacklist_update, blacklist_file, blacklist_clean, sample_files)
 
 
 if not keep_tmp:
