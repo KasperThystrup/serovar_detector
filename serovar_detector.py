@@ -330,7 +330,7 @@ if len(sample_files) == 0:
   sys.exit(0)
 
 snake_args = ""
-if force:
+if force or blacklist_clean:
   snake_args += " -F "
 if dry_run:
   snake_args += " -n "
@@ -355,7 +355,7 @@ else:
 
   if append_results and os.path.isfile(results_file):
     print("Appending new results to existing results")
-    serovar_new = pandas.read_csv(results_file, sep = "\t", header = None)
+    serovar_new = pandas.read_csv(results_file, sep = "\t")
     shutil.move(results_tmp, results_file)
     serovar_new.to_csv(results_file, sep = "\t", index = False, mode = "a", header = False)
 
