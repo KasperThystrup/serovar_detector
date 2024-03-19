@@ -238,8 +238,9 @@ summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, serova
 assembly_results <- snakemake@input[["assembly_results"]]
 reads_results <- snakemake@input[["reads_results"]]
 threshold <- snakemake@params[["threshold"]]
-serovar_file <- snakemake@output[["serovar_file"]]
 dbg <- snakemake@params[["debug"]]
+serovar_file <- snakemake@output[["serovar_file"]]
+
 
 kma_files <- c(assembly_results, reads_results)
 

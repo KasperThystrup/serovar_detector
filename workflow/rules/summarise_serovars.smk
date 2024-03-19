@@ -11,3 +11,4 @@ rule summarize_serovars:
 		"../envs/R.yaml"
 	script:
 		"../scripts/summarize_serovars.R"
+
