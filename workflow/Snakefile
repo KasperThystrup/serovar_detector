@@ -4,7 +4,8 @@ import pandas
 import numpy
 
 configfile: "config/config.yaml"
-
+print(config)
+sys.exit(0)
 database = config["database"]
 outdir = config["outdir"]
 tmpdir = config["tmpdir"]

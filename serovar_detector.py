@@ -9,7 +9,6 @@ import pandas
 import shutil
 
 
-
 def validate_snakemake(debug):
   here = os.listdir('.')
   workflow_here = 'workflow' in os.listdir('.')
@@ -223,7 +222,7 @@ def generate_sheets(reads_dir, assembly_dir, blacklist_update, blacklist_clean, 
     # Filter metadata
     metadata = metadata[~metadata["file"].isin(exclude_samples)].reset_index()
   elif blacklist_exists and blacklist_clean:
-    print("Blacklist file detected, but will be ignored and overwritten with samples of current run!"
+    print("Blacklist file detected, but will be ignored and overwritten with samples of current run!")
   
   # Ensuring not all samples have been filtered out
   sample_size = len(metadata.index)
@@ -247,7 +246,7 @@ def generate_sheets(reads_dir, assembly_dir, blacklist_update, blacklist_clean, 
     sample_files = metadata['file']
 
     # Generate PEP configuration files.
-    write_PEP(pepdir)--OB
+    write_PEP(pepdir)
   else:
     print("No new samples detected after blacklist_update.")
     sample_files = []
@@ -329,35 +328,33 @@ blacklist_file = f"{outdir}/blacklist.tsv"
 validate_snakemake(debug)
 
 if blacklist_update and blacklist_clean and os.path.isfile(blacklist_file):
-  print("Blacklist file detected, in addition blacklist update and blacklist clean options has been selected. Don't know which to chose, please decide to either update existing blacklist ('-b') or make a clean blacklist ('-B'), not both!"
+  print("Blacklist file detected, in addition blacklist update and blacklist clean options has been selected. Don't know which to chose, please decide to either update existing blacklist ('-b') or make a clean blacklist ('-B'), not both!")
 
 # Prepare config file for snakemake
-generate_configfile(database, outdir, threshold, append_results, threads, debug, tmpdir)   ### Prune
+generate_configfile(database = database, outdir = outdir, threshold = threshold, append_results = append_results, threads = threads, debug = debug, tmpdir = tmpdir)   ### Prune
 
 # Generate subsample sheet
-sample_files = generate_sheets(reads_dir, assembly_dir, outdir, tmpdir, blacklist_file)   ### Prune
+sample_files = generate_sheets(reads_dir = reads_dir, assembly_dir = assembly_dir, blacklist_update = blacklist_update, blacklist_clean = blacklist_clean, outdir = outdir, blacklist_file = blacklist_file, tmpdir = tmpdir)   ### Prune
 
 if len(sample_files) == 0:
   print("Nothing to do exitting!")
   sys.exit(0)
 
-if:
-  snake_args = ""
-  if force:
-    snake_args += " -F "
-  elif force_results:
-    snake_args += " --forcerun all "
-  if dry_run:
-    snake_args += " -n "
+snake_args = ""
+if force:
+  snake_args += " -F "
+elif force_results:
+  snake_args += " --forcerun all "
+if dry_run:
+  snake_args += " -n "
 
-  snakemake_cmd = "snakemake --use-conda --cores %s%s" %(threads, snake_args) 
-  if debug:
-    print("Running command: %s" %snakemake_cmd)
+snakemake_cmd = "snakemake --use-conda --cores %s%s" %(threads, snake_args) 
+if debug:
+  print("Running command: %s" %snakemake_cmd)
 
-  subprocess.Popen(snakemake_cmd, shell = True).wait() #check_call() Try except CalledProcessError
+subprocess.Popen(snakemake_cmd, shell = True).wait() #check_call() Try except CalledProcessError
 
-  update_blacklist(blacklist_update, blacklist_file, blacklist_clean, sample_files)
-
+update_blacklist(blacklist_update = blacklist_update, blacklist_file = blacklist_file, clean = clean, sample_files = sample_files)
 
 if not keep_tmp:
   print("Cleaning up temporary files.")
