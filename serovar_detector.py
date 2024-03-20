@@ -341,7 +341,8 @@ if debug:
 
 
 results_file = f"{outdir}/serovar.tsv"
-if append_results and os.path.isfile(results_file):
+do_append = append_results and os.path.isfile(results_file)
+if do_append:
   results_tmp = os.path.splitext(results_file)[0] + ".tmp"
   print(f"Copying {results_file} to {results_tmp}")
   shutil.copy(results_file, results_tmp)
@@ -353,7 +354,7 @@ if snake_success != 0:
 else:
   update_blacklist(blacklist_update = blacklist_update, blacklist_file = blacklist_file, blacklist_clean = blacklist_clean, sample_files = sample_files)
 
-  if append_results and os.path.isfile(results_file):
+  if do_append:
     print("Appending new results to existing results")
     serovar_new = pandas.read_csv(results_file, sep = "\t")
     shutil.move(results_tmp, results_file)
