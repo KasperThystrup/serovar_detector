@@ -88,7 +88,7 @@ resolve_serovars <- function(kma_table, profiles){
     Template_Coverage, match_perfect, match_imperfect, match_partial
   ) %>%
     dplyr::left_join(
-      y = profiles, by = c("Template_Gene" = "Gene")
+      y = profiles, by = c("Template_Gene" = "Gene"), relationship = "many-to-many"
     ) %>%
     dplyr::group_by(Sample, Serovar)
   
@@ -204,7 +204,7 @@ resolve_serovars <- function(kma_table, profiles){
 }
   
 
-summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, blacklisting, blacklist_file, serovar_file){
+summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, serovar_file){
   logger::log_info("Reading and merging all .res files.")
   res_table <- purrr::map_dfr(kma_files, read_res)
   kma_table <- apply_thresholds(res_table, threshold)
@@ -222,26 +222,6 @@ summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, blackl
   logger::log_info("Determining the most frequently repressented serovars and serovar genes.")
   results <- resolve_serovars(kma_table, profiles)
   
-  if (blacklisting){
-    blacklisted_samples <- dplyr::select(results, Sample)
-    
-    if (file.exists(blacklist_file)){
-      blacklist_input <- readr::read_tsv(blacklist_file)
-    
-      blakclisted_samples <- dplyr::bind_rows(blacklist_input, blacklisted_samples)
-      
-      any_blacklist_duplicates <- dplyr::pull(blacklisted_samples, var = Sample) %>%
-        duplicated %>%
-        any
-      
-      if (any_blacklist_duplicates){
-        warning("Duplicated blacklist sampels detected. Please check the `config/blacklist.txt`")
-        blacklisted_samples <- dplyr::distinct(blacklisted_samples)
-    }
-    
-    readr::write_tsv(x = blacklisted_samples, file = blacklist_file)
-    }
-  }
   if (file.exists(serovar_file)){
     logger::log_info("Reading existing results")
     results_old <- readr::read_tsv(serovar_file)
@@ -258,9 +238,9 @@ summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, blackl
 assembly_results <- snakemake@input[["assembly_results"]]
 reads_results <- snakemake@input[["reads_results"]]
 threshold <- snakemake@params[["threshold"]]
-blacklisting <- snakemake@params[["blacklisting"]]
-serovar_file <- snakemake@output[["serovar_file"]]
 dbg <- snakemake@params[["debug"]]
+serovar_file <- snakemake@output[["serovar_file"]]
+
 
 kma_files <- c(assembly_results, reads_results)
 
@@ -282,7 +262,5 @@ summarize_serovars(
   kma_files = kma_files,
   serovar_config_yaml = "config/serovar_profiles.yaml",
   threshold = threshold,
-  blacklisting = blacklisting,
-  blacklist_file = "config/blacklist.tsv",
   serovar_file = serovar_file
 )
