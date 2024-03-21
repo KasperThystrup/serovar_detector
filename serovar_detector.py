@@ -125,12 +125,16 @@ def create_symlinks(metadata, outdir):
       os.makedirs(name = f"{outdir}/assemblies", exist_ok = True)
 
       # Defining input and output  
-      sample_file = sample_metadata["file"]
+      sample_file = os.path.realpath(sample_metadata["file"])
       sample_link = f"{outdir}/assemblies/{sample_name}.fasta"
 
     # Symlinking file
-    if not os.path.isfile(sample_link):
-      os.symlink(src = sample_file, dst = sample_link)
+    if not os.path.exists(sample_link):
+      try:
+        os.symlink(src = sample_file, dst = sample_link)
+      except FileExistsError:
+        os.unlink(sample_link)
+        os.symlink(src = sample_file, dst = sample_link)
 
   print("Files successfully linked!")
   return True
@@ -208,7 +212,7 @@ def generate_sheets(reads_dir, assembly_dir, blacklist_update, blacklist_clean, 
   reads_metadata = screen_files(directory = reads_dir, type = "Reads")
   assembly_metadata = screen_files(directory = assembly_dir, type = "Assembly")
 
-  metadata = pandas.concat([reads_metadata, assembly_metadata], ignore_index = True)
+  metadata = pandas.concat([reads_metadata, assembly_metadata], ignore_index = True, sort = True)
 
   # Inspect blacklist if enabled
   blacklist_exists = os.path.exists(blacklist_file)  
