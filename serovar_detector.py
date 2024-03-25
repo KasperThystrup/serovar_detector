@@ -301,8 +301,8 @@ def parse_arguments():
 # Derrive arguments
 args = parse_arguments()
 
-reads_dir = os.path.abspath(args.reads_dir)
-assembly_dir = os.path.abspath(args.assembly_dir)
+reads_dir = args.reads_dir
+assembly_dir = args.assembly_dir
 database = os.path.abspath(args.database)
 outdir = os.path.abspath(args.outdir)
 threshold = args.threshold
@@ -316,6 +316,12 @@ dry_run = args.dry_run
 debug = args.debug
 tmpdir = f"{outdir}/tmp"
 blacklist_file = f"{outdir}/blacklist.tsv"
+
+# Polish input
+if len(reads_dir) > 0:
+  reads_dir = os.path.abspath(args.reads_dir)
+if len(assembliy_dir) > 0:
+  assembly_dir = os.path.abspath(args.assembly_dir)
 
 # Validate snakemake structure
 validate_snakemake(debug)
