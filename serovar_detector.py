@@ -37,7 +37,7 @@ def generate_configfile(database, outdir, threshold, append_results, threads, de
     # Check for existing config dir
     if not os.path.isdir(config_dir):
       print("No config dir detected, creating directory.")
-      os.mkdir(config_dir)
+      os.makedirs(config_dir)
 
   out_path = os.path.abspath(outdir).rstrip("/")
   
@@ -301,10 +301,8 @@ def parse_arguments():
 # Derrive arguments
 args = parse_arguments()
 
-reads_dir = args.reads_dir
-assembly_dir = args.assembly_dir
-database = args.database
-outdir = args.outdir
+database = os.path.abspath(args.database)
+outdir = os.path.abspath(args.outdir)
 threshold = args.threshold
 append_results = args.append_results
 blacklist_update = args.blacklist_update
@@ -316,6 +314,16 @@ dry_run = args.dry_run
 debug = args.debug
 tmpdir = f"{outdir}/tmp"
 blacklist_file = f"{outdir}/blacklist.tsv"
+
+# Polish input
+if not args.reads_dir:
+  reads_dir = args.reads_dir
+else:
+  reads_dir = os.path.abspath(args.reads_dir)
+if not args.assembly_dir:
+  assembly_dir = args.assembly_dir
+else:
+  assembly_dir = os.path.abspath(args.assembly_dir)
 
 # Validate snakemake structure
 validate_snakemake(debug)
