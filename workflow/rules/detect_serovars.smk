@@ -3,10 +3,10 @@ rule detect_assembly_capsules:
     assembly_file = "%s/assemblies/{sample}.fasta" %tmpdir
   params:
     db = database,
-    prefix =  "%s/kma/{sample}" %tmpdir,
-    kma_dir = "%s/kma" %tmpdir
+    prefix =  "%s/assemblies/kma/{sample}" %tmpdir,
+    kma_dir = "%s/assemblies/kma" %tmpdir
   output:
-    res_file = "%s/kma/{sample}.res" %tmpdir
+    res_file = "%s/assemblies/kma/{sample}.res" %tmpdir
   conda:
     "../envs/kma.yaml"
   threads:
@@ -29,10 +29,10 @@ rule detect_reads_capsules:
     mate2 = "%s/reads/{sample}_R2.fastq.gz" %tmpdir
   params:
     db = database,
-    prefix = "%s/kma/{sample}" %tmpdir,
-    kma_dir = "%s/kma" %tmpdir
+    prefix = "%s/reads/kma/{sample}" %tmpdir,
+    kma_dir = "%s/reads/kma" %tmpdir
   output:
-    res_file = "%s/kma/{sample}.res" %tmpdir
+    res_file = "%s/reads/kma/{sample}.res" %tmpdir
   conda:
     "../envs/kma.yaml"
   threads:
