@@ -61,7 +61,7 @@ def screen_files(directory, type):
     read_files = fastqs + fqs
 
     # Search file names for metadata
-    pattern = "^(?P<file>\S+\/(?P<sample_name>\S+?)((_S\d+)?(_L\d+)?)?_(?P<mate>[Rr]?[12])(_\d{3})?\.(?P<ext>((fastq)?(fq)?)?(\.gz)?))"
+    pattern = "^(?P<file>\S+\/(?P<sample_name>\S+?)((_S\d+)(_L\d+))?_(?P<mate>[Rr]?[12])(_\d{3})?\.(?P<ext>((fastq)?(fq)?)?(\.gz)?))"
     search = [re.search(pattern, read_file) for read_file in read_files]
 
     # Generate DataFrame from search object groups
