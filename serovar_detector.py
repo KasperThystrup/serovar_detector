@@ -301,9 +301,9 @@ def parse_arguments():
 # Derrive arguments
 args = parse_arguments()
 
-reads_dir = args.reads_dir
-assembly_dir = args.assembly_dir
-database = args.database
+reads_dir = os.path.abspath(args.reads_dir)
+assembly_dir = os.path.abspath(args.assembly_dir)
+database = os.path.abspath(args.database)
 outdir = os.path.abspath(args.outdir)
 threshold = args.threshold
 append_results = args.append_results
