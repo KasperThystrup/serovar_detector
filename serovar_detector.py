@@ -117,7 +117,7 @@ def create_symlinks(metadata, outdir):
 
       # Defining input and output
       mate = sample_metadata["mate"]
-      sample_file = sample_metadata["file"]
+      sample_file = os.path.realpath(sample_metadata["file"])
       sample_link = f"{outdir}/reads/{sample_name}_{mate}.fastq.gz"
 
     else:
