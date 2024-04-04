@@ -1,21 +1,16 @@
-library(magrittr)
-
-
 read_res <- function(res_file){
   
   logger::log_debug("Performing pattern matching to determine sample name from file: ", res_file)
-  file_matches <- res_file %>%
-    basename %>%
-    stringr::str_match_all(pattern = "^(?<sample>[^\\.]+(\\.[^\\.]+)*)\\.(?<ext>\\w+)$") %>%
+  file_matches <- basename(res_file) |>
+    stringr::str_match_all(pattern = "^(?<sample>[^\\.]+(\\.[^\\.]+)*)\\.(?<ext>\\w+)$") |>
     as.data.frame()
 
   sample_name <- file_matches$sample
   
   logger::log_debug("Reading and updating headers.")
-  header <- res_file %>%
-    readr::read_lines(n_max = 1) %>%
-    strsplit(split = "\t") %>%
-    unlist
+  header <- readr::read_lines(file = res_file, n_max = 1) |>
+    strsplit(split = "\t") |>
+    unlist()
   
   header[1] <- "Template"
   
@@ -24,12 +19,12 @@ read_res <- function(res_file){
   mod_date <- format(timestamp, format = "%Y-%m-%d")
   
   logger::log_debug("Reading file.\n\n")
-  readr::read_tsv(file = res_file, col_names = header, col_types = "ciiiddddddd", skip = 1) %>%
+  readr::read_tsv(file = res_file, col_names = header, col_types = "ciiiddddddd", skip = 1) |>
     tidyr::separate(
       col = Template,
       into = c("Template_Gene", "Template_Strain", "Template_Serovar"),
       sep = "_"
-    ) %>%
+    ) |>
     # Adding sample name column
     dplyr::mutate(Sample = sample_name, Date = mod_date)
 }
@@ -78,7 +73,7 @@ generate_serovar_profiles <- function(serovar_config_yaml){
 resolve_serovars <- function(kma_table, profiles){
   
   logger::log_debug("Extracting Date information")
-  kma_dates <- dplyr::select(kma_table, Sample, Date) %>%
+  kma_dates <- dplyr::select(kma_table, Sample, Date) |>
     dplyr::distinct()
   
   logger::log_debug("Merging kma results with serovar profiles table.") ### Warnings!!!
@@ -86,10 +81,10 @@ resolve_serovars <- function(kma_table, profiles){
     kma_table, 
     Sample, Template_Gene, Template_Strain, Template_Serovar, Template_Identity,
     Template_Coverage, match_perfect, match_imperfect, match_partial
-  ) %>%
+  ) |>
     dplyr::left_join(
       y = profiles, by = c("Template_Gene" = "Gene"), relationship = "many-to-many"
-    ) %>%
+    ) |>
     dplyr::group_by(Sample, Serovar)
   
   logger::log_debug("Counting the capsule genes to determine repressentation of serovars.")
@@ -97,7 +92,7 @@ resolve_serovars <- function(kma_table, profiles){
     kma_profile,
     Gene_count = sum(c(match_perfect, match_imperfect)),
     .groups = "drop_last"
-  ) %>%
+  ) |>
     # Determine which serovars are best represented relative to capsule gene counts
     dplyr::reframe(
       Serovar,
@@ -107,12 +102,12 @@ resolve_serovars <- function(kma_table, profiles){
     )
   
   logger::log_debug("Counting expected amount of capsule genes for each serovar")
-  profiles_count <- dplyr::group_by(profiles, Serovar) %>%
+  profiles_count <- dplyr::group_by(profiles, Serovar) |>
     dplyr::summarise(capsule_count = dplyr::n(), .groups = "keep") ## .groups added
   
   logger::log_debug("Filtering the most repressented serovar and quantifying capsule gene frequency.")
-  serovar_suggestions <- subset(kma_overview, selected) %>%
-    dplyr::group_by(Sample) %>%
+  serovar_suggestions <- subset(kma_overview, selected) |>
+    dplyr::group_by(Sample) |>
     dplyr::summarise(
       suggestions = dplyr::n(),
       Serovar = paste(Serovar, collapse = ","),
@@ -125,7 +120,7 @@ resolve_serovars <- function(kma_table, profiles){
   
   serovars_raw <- dplyr::left_join(
     x = serovar_suggestions, y = profiles_count, by = "Serovar"
-  ) %>%
+  ) |>
     dplyr::summarise(
       Sample,
       Suggested_serovar = dplyr::case_when(
@@ -141,10 +136,10 @@ resolve_serovars <- function(kma_table, profiles){
       .groups = "keep"
     )
   
-  serovars <- dplyr::inner_join(x = serovars_raw, kma_dates, by = "Sample") %>%
+  serovars <- dplyr::inner_join(x = serovars_raw, kma_dates, by = "Sample") |>
     dplyr::relocate(Date, .after = Sample)
   
-  kma_merged <- dplyr::left_join(kma_profile, serovars, by = "Sample") %>%
+  kma_merged <- dplyr::left_join(kma_profile, serovars, by = "Sample") |>
     dplyr::group_by(Sample, Template_Gene)
   
   kma_detailed <- dplyr::mutate(
@@ -164,8 +159,8 @@ resolve_serovars <- function(kma_table, profiles){
       TRUE ~ paste0(Template_Gene, " (", gene_id, gene_cov, ")")
     ),
     class = stringr::str_extract(string = Template_Gene, pattern = "\\w$")
-  ) %>%
-    dplyr::group_by(Sample) %>%
+  ) |>
+    dplyr::group_by(Sample) |>
     dplyr::arrange(class)
   
   logger::log_debug("Defining and annotating accepted gene- and partial gene-matches.")
@@ -186,7 +181,7 @@ resolve_serovars <- function(kma_table, profiles){
     Others_partial = dplyr::case_when(
       !member & match_partial ~ gene_detailed
     )
-  ) %>%
+  ) |>
     dplyr::group_by(Sample)
   
   logger::log_debug("Removing NA's and compressing accepted- and partial -genes into single columns.")
@@ -212,8 +207,8 @@ summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, serova
   if (is.null(kma_table))
     stop(
       "No `.res` files detected! Check the kma results location: ",
-      dirname(kma_dir) %>%
-        unique
+      dirname(kma_dir) |>
+        unique()
     )
   
   logger::log_info("Generating serovar profiles from profile-config file.")
