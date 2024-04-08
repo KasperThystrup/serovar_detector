@@ -240,7 +240,7 @@ resolve_serovars <- function(kma_table, profiles){
 }
   
 
-summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, serovar_file){
+summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, results_long_file, results_wide_file){
   logger::log_info("Reading and merging all .res files.")
   results_table <- purrr::map_dfr(kma_files, extract_results)
   
@@ -249,6 +249,9 @@ summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, serova
   
   logger::log_info("Assigning serovar profiles to results")
   results_profiles <- assign_serovars(results_table, profiles)
+  
+  logger::log_info(glue::glue("Writing long results table at {results_long_file}"))
+  readr::write_tsv(x = results_profiles, results_long_file)
   
   kma_table <- apply_thresholds(results_table, threshold)
   
@@ -262,16 +265,16 @@ summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, serova
   logger::log_info("Determining the most frequently repressented serovars and serovar genes.")
   results <- resolve_serovars(kma_table, profiles)
   
-  if (file.exists(serovar_file)){
+  if (file.exists(results_wide_file)){
     logger::log_info("Reading existing results")
-    results_old <- readr::read_tsv(serovar_file)
+    results_old <- readr::read_tsv(results_wide_file)
     old_samples <- dplyr::pull(results_old, Sample)
     results_new <- subset(results, !(Sample %in% old_samples))
     results_merged <- dplyr::bind_rows(results_new, results_old)
   }
   
-  logger::log_info("Writing results to: ", serovar_file)
-  readr::write_tsv(x = dplyr::arrange(results, Date, Sample), file = serovar_file)
+  logger::log_info("Writing results to: ", results_wide_file)
+  readr::write_tsv(x = dplyr::arrange(results, Date, Sample), file = results_wide_file)
   message("Success!")
 }
 
@@ -279,7 +282,8 @@ assembly_results <- snakemake@input[["assembly_results"]]
 reads_results <- snakemake@input[["reads_results"]]
 threshold <- snakemake@params[["threshold"]]
 dbg <- snakemake@params[["debug"]]
-serovar_file <- snakemake@output[["serovar_file"]]
+results_long_file <- snakemake@output[["results_long_file"]]
+results_wide_file <- snakemake@output[["results_wide_file"]]
 
 
 kma_files <- c(assembly_results, reads_results)
@@ -289,7 +293,7 @@ if (dbg){
   logger::log_threshold(level = logger::DEBUG)
   
   tmp_file <- file.path(
-    dirname(serovar_file),
+    dirname(results_wide_file),
     "summarize_serovars.RData"
   )
   
@@ -302,5 +306,6 @@ summarize_serovars(
   kma_files = kma_files,
   serovar_config_yaml = "config/serovar_profiles.yaml",
   threshold = threshold,
-  serovar_file = serovar_file
+  results_long_file = results_long_file,
+  results_wide_file = results_wide_file
 )

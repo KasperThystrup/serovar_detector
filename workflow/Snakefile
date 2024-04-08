@@ -28,7 +28,8 @@ if "Assembly" in sample_sheet["type"].values:
 
 rule all:
   input:
-    serovar = "%s/serovar.tsv" %outdir
+    results_wide_file = "%s/serovar.tsv" %outdir,
+    results_long_file = "%s/results_long.tsv" %outdir
 
 
 include: "rules/detect_serovars.smk"
