@@ -1,45 +1,87 @@
-read_res <- function(res_file){
-  
+screen_file_info <- function(res_file){
   logger::log_debug("Performing pattern matching to determine sample name from file: ", res_file)
-  file_matches <- basename(res_file) |>
-    stringr::str_match_all(pattern = "^(?<sample>[^\\.]+(\\.[^\\.]+)*)\\.(?<ext>\\w+)$") |>
-    as.data.frame()
-
-  sample_name <- file_matches$sample
+  file_matches <- stringr::str_match_all(res_file, pattern = "^(?<file>[^/]*(/[^/]+)+/(?<sample>[^/]+)\\.(?<ext>\\w+))$")
+  file_frame <- as.data.frame(file_matches)
   
-  logger::log_debug("Reading and updating headers.")
-  header <- readr::read_lines(file = res_file, n_max = 1) |>
-    strsplit(split = "\t") |>
-    unlist()
-  
-  header[1] <- "Template"
-  
-  logger::log_debug("Determining file modification date.")
-  timestamp <- file.mtime(res_file)
-  mod_date <- format(timestamp, format = "%Y-%m-%d")
-  
-  logger::log_debug("Reading file.\n\n")
-  readr::read_tsv(file = res_file, col_names = header, col_types = "ciiiddddddd", skip = 1) |>
-    tidyr::separate(
-      col = Template,
-      into = c("Template_Gene", "Template_Strain", "Template_Serovar"),
-      sep = "_"
-    ) |>
-    # Adding sample name column
-    dplyr::mutate(Sample = sample_name, Date = mod_date)
+  dplyr::select(file_frame, sample, file, ext)
 }
 
 
-apply_thresholds <- function(res_table, threshold){
+read_res_header <- function(res_file){
+  logger::log_debug("Reading and updating headers.")
+  header_raw <- readr::read_lines(file = res_file, n_max = 1)
+  
+  header <- strsplit(header_raw, split = "\t") |>
+    unlist()
+  
+  logger::log_debug("Removing odd characters")
+  header <- stringr::str_remove_all(string = header, pattern = "\\#")
+  
+  return(header)
+}
+
+
+read_results <- function(results_file, header){
+  logger::log_debug("Reading file.")
+  results_raw <- readr::read_tsv(
+    file = results_file, col_names = header, col_types = "ciiiddddddd", skip = 1
+  )
+  
+  logger::log_debug("Splitting template column.\n\n")
+  results <- tidyr::separate(
+    data = results_raw,
+    col = Template,
+    into = c("Template_Gene", "Template_Strain", "Template_Serovar"),
+    sep = "_"
+  )
+  
+  return(results)
+}
+
+
+extract_results <- function(results_file){
+  
+  file_info <- screen_file_info(results_file)
+
+  header <- read_res_header(results_file)
+  
+  logger::log_debug("Determining file modification date.")
+  mod_date <- file.mtime(results_file) |>
+    lubridate::as_date()
+  
+  results <- read_results(results_file, header)
+  
+  logger::log_debug("Adding sample name column")
+  dplyr::mutate(
+    .data = results,
+    Sample = dplyr::pull(file_info, var = sample), Date = mod_date, .before = 1
+  )
+}
+
+
+assign_serovars <- function(results_table, profiles){
+  logger::log_debug("Merging results table and serovar profiles")
+  results_profiles <- dplyr::left_join(
+    x = results_table, y = profiles,
+    by = c("Template_Gene" = "Gene"),
+    relationship = "many-to-many"
+  )
+  
+  logger::log_debug("Rearranging serovar profile column")
+  dplyr::relocate(.data = results_profiles, Serovar_profile = Serovar, .after = Date)
+}
+
+
+apply_thresholds <- function(results_table, threshold){
   logger::log_debug("Applying thresholds")
   
-  empty_table <- nrow(res_table) == 0
+  empty_table <- nrow(results_table) == 0
   
   if (empty_table)
     return(NULL)
   
   dplyr::mutate(
-    res_table,
+    results_table,
     match_perfect = Template_Identity == 100 & Template_Coverage == 100,
     match_imperfect = !match_perfect & (Template_Identity >= threshold & Template_Coverage >= threshold), # Manual thresholds!!
     match_partial = !match_imperfect & !match_perfect
@@ -195,14 +237,20 @@ resolve_serovars <- function(kma_table, profiles){
   )
   
   dplyr::left_join(serovars, genes, by = "Sample")
-    
 }
   
 
 summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, serovar_file){
   logger::log_info("Reading and merging all .res files.")
-  res_table <- purrr::map_dfr(kma_files, read_res)
-  kma_table <- apply_thresholds(res_table, threshold)
+  results_table <- purrr::map_dfr(kma_files, extract_results)
+  
+  logger::log_info("Generating serovar profiles from profile-config file.")
+  profiles <- generate_serovar_profiles(serovar_config_yaml)
+  
+  logger::log_info("Assigning serovar profiles to results")
+  results_profiles <- assign_serovars(results_table, profiles)
+  
+  kma_table <- apply_thresholds(results_table, threshold)
   
   if (is.null(kma_table))
     stop(
@@ -210,9 +258,6 @@ summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, serova
       dirname(kma_dir) |>
         unique()
     )
-  
-  logger::log_info("Generating serovar profiles from profile-config file.")
-  profiles <- generate_serovar_profiles(serovar_config_yaml)
   
   logger::log_info("Determining the most frequently repressented serovars and serovar genes.")
   results <- resolve_serovars(kma_table, profiles)
