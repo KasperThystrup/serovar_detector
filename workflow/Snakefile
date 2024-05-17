@@ -13,6 +13,8 @@ append_results = config["append_results"]
 debug = config["debug"]
 pepfile: f"{outdir}/schemas/project_config.yaml"
 
+serovar_profiles = "config/serovar_profiles.yaml"
+
 sample_sheet = pep.sample_table
 
 sample_grouped = sample_sheet.groupby("type")

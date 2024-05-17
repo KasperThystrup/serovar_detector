@@ -1,311 +1,117 @@
-screen_file_info <- function(res_file){
-  logger::log_debug("Performing pattern matching to determine sample name from file: ", res_file)
-  file_matches <- stringr::str_match_all(res_file, pattern = "^(?<file>[^/]*(/[^/]+)+/(?<sample>[^/]+)\\.(?<ext>\\w+))$")
-  file_frame <- as.data.frame(file_matches)
-  
-  dplyr::select(file_frame, sample, file, ext)
-}
+load(srv_2_z("/srv/data/AS/ResGroup/Tools/serovar_detector/mini/summarize_serovars.RData"))
+
+assembly_files <- snakemake@input[["assembly_results"]] # snakemake@input[["assembly_files"]]
+reads_files <- snakemake@input[["reads_results"]] # snakemake@input[["reads_files"]]
+threshold <- snakemake@params[["threshold"]]
+debug <- snakemake@params[["debug"]]
+results_wide_file <- snakemake@output[["results_wide_file"]]
+results_long_file <- snakemake@output[["results_long_file"]]
 
 
-read_res_header <- function(res_file){
-  logger::log_debug("Reading and updating headers.")
-  header_raw <- readr::read_lines(file = res_file, n_max = 1)
-  
-  header <- strsplit(header_raw, split = "\t") |>
-    unlist()
-  
-  logger::log_debug("Removing odd characters")
-  header <- stringr::str_remove_all(string = header, pattern = "\\#")
-  
-  return(header)
-}
-
-
-read_results <- function(results_file, header){
-  logger::log_debug("Reading file.")
+import_results <- function(results_file){
+  # Read results file and repair column names
   results_raw <- readr::read_tsv(
-    file = results_file, col_names = header, col_types = "ciiiddddddd", skip = 1
+    file = results_file,
+    col_types = "ciiiddddddd",
+    name_repair = ~ janitor::make_clean_names(string = .x, replace = c("\\#" = ""))
   )
   
-  logger::log_debug("Splitting template column.\n\n")
+  # Determine sample id
+  sample_id <- basename(results_file) |>
+    tools::file_path_sans_ext()
+  
+  # Prepare imported data
   results <- tidyr::separate(
-    data = results_raw,
-    col = Template,
-    into = c("Template_Gene", "Template_Strain", "Template_Serovar"),
-    sep = "_"
+    data = dplyr::mutate(results_raw, sample_id = sample_id, .before = 1),
+    col = template, into = c("gene", "strain", "feature"), sep = "_"
   )
   
-  return(results)
+  # Remove feature column
+  dplyr::select(results, -feature) ## feature is a helper string for the database
 }
 
 
-extract_results <- function(results_file){
+filter_results <- function(results){
+  # Filter for top score by 1: Coverage, 2: Identity, and 3: Score
+  results_top <- dplyr::filter(
+    .data = dplyr::group_by(results, sample_id, gene),
+    template_coverage == max(template_coverage)
+  ) |>
+    dplyr::filter(template_identity == max(template_identity)) |>
+    dplyr::filter(score == max(score))
   
-  file_info <- screen_file_info(results_file)
-
-  header <- read_res_header(results_file)
-  
-  logger::log_debug("Determining file modification date.")
-  mod_date <- file.mtime(results_file) |>
-    lubridate::as_date()
-  
-  results <- read_results(results_file, header)
-  
-  logger::log_debug("Adding sample name column")
-  dplyr::mutate(
-    .data = results,
-    Sample = dplyr::pull(file_info, var = sample), Date = mod_date, .before = 1
-  )
+  # Arrange top results, filter by threshold and select top hit only
+  dplyr::filter(
+    dplyr::arrange(results_top, template_coverage, template_identity, score),
+    template_coverage >= threshold & template_coverage >= threshold
+  ) |>
+    dplyr::slice_head(n = 1)
 }
 
 
-assign_serovars <- function(results_table, profiles){
-  logger::log_debug("Merging results table and serovar profiles")
-  results_profiles <- dplyr::left_join(
-    x = results_table, y = profiles,
-    by = c("Template_Gene" = "Gene"),
+implement_profiles <- function(profile_file, profile){
+  # Read profiles file directly into a data frame
+  profiles_raw <- yaml::read_yaml(profile_file) |>
+    plyr::ldply(tibble::as_tibble)
+  
+  # Generate clean column names
+  profiles_clean <- dplyr::select(
+    .data = dplyr::tibble(profiles_raw),
+    "gene" = value,
+    "feature" = .id
+  )
+  
+  # Add feature to the frame
+  dplyr::mutate(profiles_clean, profile = profile)
+}
+
+
+merge_profiles <- function(results, serovar_profiles){
+  # Merge results and profiles
+  results_serovar <- dplyr::left_join(
+    x = results, y = serovar_profiles, by = "gene",
     relationship = "many-to-many"
   )
   
-  logger::log_debug("Rearranging serovar profile column")
-  dplyr::relocate(.data = results_profiles, Serovar_profile = Serovar, .after = Date)
+  results_merged <- results_serovar # dplyr::left_join next profile
+  dplyr::relocate(results_merged, feature, profile, .before = score) 
 }
 
+results_assemblies <- purrr::map_dfr(.x = srv_2_z(assembly_files), .f = import_results)
+results_reads <- purrr::map_dfr(.x = srv_2_z(reads_files), .f = import_results)
+results <- dplyr::bind_rows(results_assemblies, results_reads)
 
-apply_thresholds <- function(results_table, threshold){
-  logger::log_debug("Applying thresholds")
-  
-  empty_table <- nrow(results_table) == 0
-  
-  if (empty_table)
-    return(NULL)
-  
-  dplyr::mutate(
-    results_table,
-    match_perfect = Template_Identity == 100 & Template_Coverage == 100,
-    match_imperfect = !match_perfect & (Template_Identity >= threshold & Template_Coverage >= threshold), # Manual thresholds!!
-    match_partial = !match_imperfect & !match_perfect
-  )
-}
+results_filtered <- filter_results(results)
+
+serovar_profiles <- implement_profiles(profile_file = profile_file, profile = "Serovar")
+
+results_long <- merge_profiles(results_filtered, serovar_profiles)
 
 
-object_to_dataframe <- function(list_iterator, object){
-  item <- object[list_iterator]
-  serovar <- names(item)
-  genes <- unlist(item)
-  
-  dplyr::tibble(Gene = genes, Serovar = serovar)
-}
+## Long table done -> Export to results_long_file
+### Make gene label (%ID and %Cov) after merging? (allready grouped per gene)
+### Make summary table now :-D
 
+profiles_members <- dplyr::summarise(
+  .data = dplyr::group_by(serovar_profiles, profile, feature),
+  members = dplyr::n(),
+  .groups = "keep"
+)
 
-list_to_table <- function(object){
-  purrr::map_dfr(seq_along(object), object_to_dataframe, object)
-}
+results_count <- dplyr::summarise(
+  .data = dplyr::group_by(results_long, sample_id, profile, feature),
+  count = dplyr::n(),
+  .groups = "keep"
+)
 
+results_top <- dplyr::mutate(
+  .data = dplyr::left_join(results_count, profiles_members),
+  freq = count/members
+)
 
-generate_serovar_profiles <- function(serovar_config_yaml){
-  logger::log_debug("Importing serovar profiles from: ", serovar_config_yaml)
-  serovar_yaml <- yaml::yaml.load_file(input = serovar_config_yaml)
-  
-  logger::log_debug("Converting format into dataframe.")
-  list_to_table(serovar_yaml)
-}
+dplyr::filter(results_top, freq == max(freq))
 
-
-resolve_serovars <- function(kma_table, profiles){
-  
-  logger::log_debug("Extracting Date information")
-  kma_dates <- dplyr::select(kma_table, Sample, Date) |>
-    dplyr::distinct()
-  
-  logger::log_debug("Merging kma results with serovar profiles table.") ### Warnings!!!
-  kma_profile <- dplyr::select(
-    kma_table, 
-    Sample, Template_Gene, Template_Strain, Template_Serovar, Template_Identity,
-    Template_Coverage, match_perfect, match_imperfect, match_partial
-  ) |>
-    dplyr::left_join(
-      y = profiles, by = c("Template_Gene" = "Gene"), relationship = "many-to-many"
-    ) |>
-    dplyr::group_by(Sample, Serovar)
-  
-  logger::log_debug("Counting the capsule genes to determine repressentation of serovars.")
-  kma_overview <- dplyr::summarise(
-    kma_profile,
-    Gene_count = sum(c(match_perfect, match_imperfect)),
-    .groups = "drop_last"
-  ) |>
-    # Determine which serovars are best represented relative to capsule gene counts
-    dplyr::reframe(
-      Serovar,
-      Gene_count,
-      selected = Gene_count == max(Gene_count),
-      .groups = "drop"
-    )
-  
-  logger::log_debug("Counting expected amount of capsule genes for each serovar")
-  profiles_count <- dplyr::group_by(profiles, Serovar) |>
-    dplyr::summarise(capsule_count = dplyr::n(), .groups = "keep") ## .groups added
-  
-  logger::log_debug("Filtering the most repressented serovar and quantifying capsule gene frequency.")
-  serovar_suggestions <- subset(kma_overview, selected) |>
-    dplyr::group_by(Sample) |>
-    dplyr::summarise(
-      suggestions = dplyr::n(),
-      Serovar = paste(Serovar, collapse = ","),
-      count = dplyr::case_when(
-        suggestions != 1 ~ NA_integer_,
-        TRUE ~ unique(Gene_count)
-      ),
-      .groups = "keep"
-    )
-  
-  serovars_raw <- dplyr::left_join(
-    x = serovar_suggestions, y = profiles_count, by = "Serovar"
-  ) |>
-    dplyr::summarise(
-      Sample,
-      Suggested_serovar = dplyr::case_when(
-        is.na(count) ~ paste(Serovar, sep = ", "),
-        count / capsule_count < 0.5 ~ paste0("?", Serovar, collapse = ", "),
-        TRUE ~ Serovar
-      ),
-        
-      Frequency = dplyr::case_when(
-        is.na(count) ~ NA_character_,
-        TRUE ~ paste(count, capsule_count, sep = " of ")
-      ),
-      .groups = "keep"
-    )
-  
-  serovars <- dplyr::inner_join(x = serovars_raw, kma_dates, by = "Sample") |>
-    dplyr::relocate(Date, .after = Sample)
-  
-  kma_merged <- dplyr::left_join(kma_profile, serovars, by = "Sample") |>
-    dplyr::group_by(Sample, Template_Gene)
-  
-  kma_detailed <- dplyr::mutate(
-    kma_merged,
-    member = any(Serovar == Suggested_serovar),
-    gene_id = dplyr::case_when(
-      Template_Identity == 100 ~ "",
-      Template_Identity != 100 & Template_Coverage == 100 ~ paste0(Template_Identity, "% ID"),
-      TRUE ~ paste0(Template_Identity, "% ID, ")
-    ),
-    gene_cov = dplyr::case_when(
-      Template_Coverage == 100 ~ "",
-      TRUE ~ paste0(Template_Coverage, "% COV")
-    ),
-    gene_detailed = dplyr::case_when(
-      match_perfect ~ Template_Gene,
-      TRUE ~ paste0(Template_Gene, " (", gene_id, gene_cov, ")")
-    ),
-    class = stringr::str_extract(string = Template_Gene, pattern = "\\w$")
-  ) |>
-    dplyr::group_by(Sample) |>
-    dplyr::arrange(class)
-  
-  logger::log_debug("Defining and annotating accepted gene- and partial gene-matches.")
-  kma_genes <- dplyr::reframe(
-    kma_detailed,
-    Serovar_match = dplyr::case_when(
-      member & match_perfect ~ gene_detailed,
-      member & match_imperfect ~ gene_detailed
-    ),
-    Serovar_partial = dplyr::case_when(
-      member & match_partial ~ gene_detailed
-    ),
-    
-    Others_match = dplyr::case_when(
-      !member & match_perfect ~ gene_detailed,
-      !member & match_imperfect ~ gene_detailed
-    ),
-    Others_partial = dplyr::case_when(
-      !member & match_partial ~ gene_detailed
-    )
-  ) |>
-    dplyr::group_by(Sample)
-  
-  logger::log_debug("Removing NA's and compressing accepted- and partial -genes into single columns.")
-  genes <- dplyr::summarise(
-    kma_genes,
-    Serovar_match = paste0(unique(Serovar_match[!is.na(Serovar_match)]), collapse = ", "),
-    Serovar_partial = paste0(unique(Serovar_partial[!is.na(Serovar_partial)]), collapse = ", "),
-    Others_match = paste0(unique(Others_match[!is.na(Others_match)]), collapse = ", "),
-    Others_partial = paste0(unique(Others_partial[!is.na(Others_partial)]), collapse = ", "),
-    .groups = "drop"
-  )
-  
-  dplyr::left_join(serovars, genes, by = "Sample")
-}
-  
-
-summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, results_long_file, results_wide_file){
-  logger::log_info("Reading and merging all .res files.")
-  results_table <- purrr::map_dfr(kma_files, extract_results)
-  
-  logger::log_info("Generating serovar profiles from profile-config file.")
-  profiles <- generate_serovar_profiles(serovar_config_yaml)
-  
-  logger::log_info("Assigning serovar profiles to results")
-  results_profiles <- assign_serovars(results_table, profiles)
-  
-  logger::log_info(glue::glue("Writing long results table at {results_long_file}"))
-  readr::write_tsv(x = results_profiles, results_long_file)
-  
-  kma_table <- apply_thresholds(results_table, threshold)
-  
-  if (is.null(kma_table))
-    stop(
-      "No `.res` files detected! Check the kma results location: ",
-      dirname(kma_dir) |>
-        unique()
-    )
-  
-  logger::log_info("Determining the most frequently repressented serovars and serovar genes.")
-  results <- resolve_serovars(kma_table, profiles)
-  
-  if (file.exists(results_wide_file)){
-    logger::log_info("Reading existing results")
-    results_old <- readr::read_tsv(results_wide_file)
-    old_samples <- dplyr::pull(results_old, Sample)
-    results_new <- subset(results, !(Sample %in% old_samples))
-    results_merged <- dplyr::bind_rows(results_new, results_old)
-  }
-  
-  logger::log_info("Writing results to: ", results_wide_file)
-  readr::write_tsv(x = dplyr::arrange(results, Date, Sample), file = results_wide_file)
-  message("Success!")
-}
-
-assembly_results <- snakemake@input[["assembly_results"]]
-reads_results <- snakemake@input[["reads_results"]]
-threshold <- snakemake@params[["threshold"]]
-dbg <- snakemake@params[["debug"]]
-results_long_file <- snakemake@output[["results_long_file"]]
-results_wide_file <- snakemake@output[["results_wide_file"]]
-
-
-kma_files <- c(assembly_results, reads_results)
-
-logger::log_threshold(level = logger::INFO)
-if (dbg){
-  logger::log_threshold(level = logger::DEBUG)
-  
-  tmp_file <- file.path(
-    dirname(results_wide_file),
-    "summarize_serovars.RData"
-  )
-  
-  logger::log_debug("Writing snakemake R object to ", tmp_file)
-  save(snakemake, file = tmp_file)
-  
-}
-
-summarize_serovars(
-  kma_files = kma_files,
-  serovar_config_yaml = "config/serovar_profiles.yaml",
-  threshold = threshold,
-  results_long_file = results_long_file,
-  results_wide_file = results_wide_file
+results_summary <- dplyr::summarise(
+  .data = dplyr::group_by(results_members, sample_id, profile, feature),
+  frequency = glue::glue("{dplyr::n()}/{members}")
 )
