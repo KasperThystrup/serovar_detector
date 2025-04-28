@@ -1,5 +1,5 @@
 .snakemake/
-config/
+config/config.yaml
 schemas/
 ignore
 stashlist.txt
