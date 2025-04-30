@@ -34,26 +34,27 @@ Actinobacillus Pleuropneumoniae.
 ```
 
 An overview of the available options:
-
-|  -h, --help         show this help message and exit
-|  -r --reads_dir     Input path to reads directory
-|  -a --assembly_dir  Input path to assembly directory
-|  -D --database      Path and prefix to kmer-aligner database
-|  -o --outdir        Output path to Results and Temporary files directory
-|  -T --theshold      Cutoff threshold of match coverage and identity. Ignore
-|                     threshold by setting to 0 or False. (Default 98)
-|  -R                 Append to existing results file. (Default False)
-|  -b                 Update existing blacklist file with new samples. Creates
-|                     a blacklist file if non exists. (Default False)
-|  -B                 Ignore and overwrite existing blacklist file. Creates a
-|                     blacklist if non exists. (Default False)
-|  -k                 Preserve temporary files such as KMA result files.
-|                     (Default False)
-|  -t --threads       Number of threads to allocate for the pipeline. (Default
-|                     3)
-|  -F                 Force rerun of all tasks in pipeline. (Default False)
-|  -n                 Perform a dry run with Snakemake to see jobs but without
-|                     executing them. (Default False)
-|  -d                 Enable debug mode, stores snakemake object for inspection
-|                     in R. (Default False)
+```
+  -h, --help         show this help message and exit
+  -r --reads_dir     Input path to reads directory
+  -a --assembly_dir  Input path to assembly directory
+  -D --database      Path and prefix to kmer-aligner database
+  -o --outdir        Output path to Results and Temporary files directory
+  -T --theshold      Cutoff threshold of match coverage and identity. Ignore
+                     threshold by setting to 0 or False. (Default 98)
+  -R                 Append to existing results file. (Default False)
+  -b                 Update existing blacklist file with new samples. Creates
+                     a blacklist file if non exists. (Default False)
+  -B                 Ignore and overwrite existing blacklist file. Creates a
+                     blacklist if non exists. (Default False)
+  -k                 Preserve temporary files such as KMA result files.
+                     (Default False)
+  -t --threads       Number of threads to allocate for the pipeline. (Default
+                     3)
+  -F                 Force rerun of all tasks in pipeline. (Default False)
+  -n                 Perform a dry run with Snakemake to see jobs but without
+                     executing them. (Default False)
+  -d                 Enable debug mode, stores snakemake object for inspection
+                     in R. (Default False)
+```
 
