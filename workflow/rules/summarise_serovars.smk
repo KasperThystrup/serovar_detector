@@ -1,25 +1,14 @@
-rule serovar_profiles:
-	params:
-		debug = debug
-	output:
-		profiles_file = "%s/serovar_profiles.tsv" %outdir
-	conda:
-		"../envs/R.yaml"
-	script:
-		"../scripts/generate_serovar_profiles.R"
-
-
 rule summarize_serovars:
 	input:
-		kma_dir = expand(rules.detect_capsules.output.kma_dir, sample = samples),
-		profiles_file = rules.serovar_profiles.output.profiles_file
+		assembly_results = expand(rules.detect_assembly_capsules.output.res_file, sample = assembly_sheet["sample_name"].values.tolist()),
+		reads_results = expand(rules.detect_reads_capsules.output.res_file, sample = reads_sheet["sample_name"].values.tolist())
 	params:
-		threshold_id = threshold_id,
-		threshold_cov = threshold_cov,
+		threshold = threshold,
 		debug = debug
 	output:
-		serovar_file = "%s/Results/serovar.tsv" %outdir
+		serovar_file = "%s/serovar.tsv" %outdir
 	conda:
 		"../envs/R.yaml"
 	script:
 		"../scripts/summarize_serovars.R"
+

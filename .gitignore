@@ -1,1 +1,9 @@
 .snakemake/
+config/
+schemas/
+ignore
+stashlist.txt
+*RData
+slurm*
+.gitignore
+*.swp

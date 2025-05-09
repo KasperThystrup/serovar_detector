@@ -1,0 +1,36 @@
+import sys
+import os
+import pandas
+import numpy
+
+configfile: "config/config.yaml"
+
+database = config["database"]
+outdir = config["outdir"]
+tmpdir = config["tmpdir"]
+threshold = config["threshold"]
+append_results = config["append_results"]
+debug = config["debug"]
+pepfile: f"{outdir}/schemas/project_config.yaml"
+
+sample_sheet = pep.sample_table
+
+sample_grouped = sample_sheet.groupby("type")
+
+reads_sheet = pandas.DataFrame({"sample_name": []})
+if "Reads" in sample_sheet["type"].values:
+  reads_sheet = sample_grouped.get_group("Reads")
+
+assembly_sheet = pandas.DataFrame({"sample_name": []})
+if "Assembly" in sample_sheet["type"].values:
+  assembly_sheet = sample_grouped.get_group("Assembly")
+
+
+rule all:
+  input:
+    serovar = "%s/serovar.tsv" %outdir
+
+
+include: "rules/detect_serovars.smk"
+include: "rules/summarise_serovars.smk"
+
