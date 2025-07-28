@@ -19,7 +19,7 @@ git clone https://github.com/KasperThystrup/serovar_detector.git ~/repos/serovar
 ## Quick start
 Assuming that you have navigated into the repository folder (e.g. ~/repos/serovar_detector) and are executing the command from an conda environment with installed requirements.
 ```
-python serovar_detector.py -r /path/to/input/reads -a /path/to/input/assemblies -D db/ -o /path/to/output/serovar_detector/ -t [nr. of threads]
+python serovar_detector.py -r /path/to/input/reads -a /path/to/input/assemblies -D db/Actinobacillus_pleuropneumoniae -o /path/to/output/serovar_detector/ -t [nr. of threads]
 ```
 
 ## Options
