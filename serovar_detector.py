@@ -31,18 +31,18 @@ def validate_snakemake(debug):
 def generate_configfile(database, outdir, threshold, append_results, threads, debug, tmpdir):
   # Define config file
   config_file = "config/config.yaml"
-  
+
   # Check for existing config file
   if not os.path.isfile(config_file):
     config_dir = os.path.dirname(config_file)
-    
+
     # Check for existing config dir
     if not os.path.isdir(config_dir):
       print("No config dir detected, creating directory.")
       os.makedirs(config_dir)
 
   out_path = os.path.abspath(outdir).rstrip("/")
-  
+
   config = {
     "database": database, "outdir": out_path, "threshold": threshold,
     "append_results": append_results, "threads": threads, "debug": debug,
@@ -63,7 +63,7 @@ def screen_files(directory, type):
     read_files = fastqs + fqs
 
     # Search file names for metadata
-    pattern = "^(?P<file>\S+\/(?P<sample_name>\S+?)((_S\d+)(_L\d+))?_(?P<mate>[Rr]?[12])(_\d{3})?\.(?P<ext>((fastq)?(fq)?)?(\.gz)?))"
+    pattern = r"^(?P<file>\S+\/(?P<sample_name>\S+?)((_S\d+)(_L\d+))?_(?P<mate>[Rr]?[12])(_\d{3})?\.(?P<ext>((fastq)?(fq)?)?(\.gz)?))"
     search = [re.search(pattern, read_file) for read_file in read_files]
 
     # Generate DataFrame from search object groups
@@ -73,10 +73,10 @@ def screen_files(directory, type):
       "file": [search.group("file") for search in search],
       "type": type
     })
-    
+
     # Sort table
     metadata = metadata_raw.sort_values(by = ["sample_name", "mate"])
- 
+
   elif type == "Assembly":
     # Screen for files
     fastas = [sample_assembly for sample_assembly in glob.glob("%s/*.fasta" %directory)]
@@ -86,7 +86,7 @@ def screen_files(directory, type):
     assembly_files = fastas + fas
 
     # Search file names for metadata
-    pattern = "^(?P<file>\S+\/(?P<sample_name>\S+)\.(?P<ext>[fast]+))"
+    pattern = r"^(?P<file>\S+\/(?P<sample_name>\S+)\.(?P<ext>[fast]+))"
     search = [re.search(pattern, assembly_file) for assembly_file in assembly_files]
 
     # Generate DataFrame from search object groups
@@ -101,7 +101,7 @@ def screen_files(directory, type):
 
   else:
     return(pandas.DataFrame({"sample_name", "mate", "file", "type"}))
-  
+
   return(metadata) #file_metadata
 
 
@@ -126,7 +126,7 @@ def create_symlinks(metadata, outdir):
       # Ensuring outdir exists
       os.makedirs(name = f"{outdir}/assemblies", exist_ok = True)
 
-      # Defining input and output  
+      # Defining input and output
       sample_file = os.path.realpath(sample_metadata["file"])
       sample_link = f"{outdir}/assemblies/{sample_name}.fasta"
 
@@ -146,7 +146,7 @@ def make_sample_sheet(table):
   print("Generating sample sheet", end = "... ")
 
   file_count = len(table.index)
-  
+
   if file_count > 0:
     sample_subset = table[["sample_name", "type"]]
     sample_sheet = sample_subset.drop_duplicates()
@@ -168,7 +168,7 @@ def write_sample_sheet(sample_sheet, pepdir):
     print("Success: Overwritting %s" %sample_file)
   else:
     print("Success: Written to %s" %sample_file)
-    
+
 
 def write_subsample_sheet(subsample_sheet, pepdir):
   subsample_file = f"{pepdir}/subsample_sheet.csv"
@@ -187,23 +187,23 @@ def write_PEP(pepdir):
   # Define pep files
   pep_file = f"{pepdir}/project_config.yaml"
   pep_exists = os.path.exists(pep_file)
-  
+
   # Generate PEP configuration:
   PEP_header = "pep_version: 2.1.0\n"
   PEP_sample = "sample_table: 'sample_sheet.csv'\n"
   PEP_subsample = "subsample_table: 'subsample_sheet.csv'"
- 
+
   print("Writing project configuration file", end = "... ")
   with open(pep_file, "w") as config_file:
     config_file.write(PEP_header)
     config_file.write(PEP_sample)
     config_file.write(PEP_subsample)
-    
+
   if not pep_exists:
     print("Success: Written to %s" %pep_file)
   elif pep_exists:
     print("Success: Overwriting %s" %pep_file)
-  
+
 
 def generate_sheets(reads_dir, assembly_dir, enable_blacklist, blacklist_clean, outdir, blacklist_file, tmpdir):
   # Generating dirs
@@ -217,13 +217,13 @@ def generate_sheets(reads_dir, assembly_dir, enable_blacklist, blacklist_clean, 
   metadata = pandas.concat([reads_metadata, assembly_metadata], ignore_index = True, sort = True)
 
   # Inspect blacklist if enabled
-  blacklist_exists = os.path.exists(blacklist_file)  
+  blacklist_exists = os.path.exists(blacklist_file)
   if blacklist_exists:
     print("Blacklist file detected, reading!")
     blacklist = pandas.read_csv(blacklist_file, sep = "\t")
 
     exclude_samples = blacklist["file"].values
-  
+
     # Filter metadata
     metadata = metadata[~metadata["file"].isin(exclude_samples)].reset_index()
     if not enable_blacklist:
@@ -232,7 +232,7 @@ def generate_sheets(reads_dir, assembly_dir, enable_blacklist, blacklist_clean, 
   # Ensuring not all samples have been filtered out
   sample_size = len(metadata.index)
   if sample_size > 0:
-    
+
     # Generate symlinks
     create_symlinks(metadata, tmpdir)
 
@@ -241,7 +241,7 @@ def generate_sheets(reads_dir, assembly_dir, enable_blacklist, blacklist_clean, 
     pepdir_exists = os.path.isdir(pepdir)
 
     if not pepdir_exists:
-      os.makedirs(pepdir, exist_ok = True) 
+      os.makedirs(pepdir, exist_ok = True)
 
     sample_sheet = make_sample_sheet(metadata)
     sample_sheet_updated = write_sample_sheet(sample_sheet, pepdir)
@@ -277,9 +277,9 @@ def update_blacklist(enable_blacklist, blacklist_file, blacklist_clean, sample_f
       return(False)
   else:
       print("Created new blacklist file")
-   
+
   sample_files.to_csv(blacklist_file, sep = "\t", index=False, mode = mode, header = include_header)
-    
+
   return(True)
 
 
@@ -341,6 +341,7 @@ generate_configfile(database = database, outdir = outdir, threshold = threshold,
 # Generate subsample sheet
 sample_files = generate_sheets(reads_dir = reads_dir, assembly_dir = assembly_dir, enable_blacklist = enable_blacklist, blacklist_clean = blacklist_clean, outdir = outdir, blacklist_file = blacklist_file, tmpdir = tmpdir)
 
+
 if len(sample_files) == 0:
   print("Nothing to do exitting!")
   sys.exit(0)
@@ -351,7 +352,13 @@ if force or blacklist_clean:
 if dry_run:
   snake_args += " -n "
 
-snakemake_cmd = "snakemake --use-conda --cores %s%s" %(threads, snake_args) 
+# Use Snakemake's own conda envs only when explicitly requested. By default the
+# required tools (kma, R + packages, snakemake) are expected on PATH already
+# (e.g. provided by Galaxy's dependency resolver), so no per-run env building.
+# Set SEROVAR_DETECTOR_USE_CONDA=1 (or true/yes) to restore the old behaviour.
+_use_conda = os.environ.get("SEROVAR_DETECTOR_USE_CONDA", "").strip().lower() in ("1", "true", "yes")
+_conda_flag = "--use-conda " if _use_conda else ""
+snakemake_cmd = "snakemake %s--cores %s%s" %(_conda_flag, threads, snake_args)
 if debug:
   print("Running command: %s" %snakemake_cmd)
 
