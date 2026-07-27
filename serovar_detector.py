@@ -28,7 +28,7 @@ def validate_snakemake(debug):
     sys.exit(1)
 
 
-def generate_configfile(database, outdir, threshold, append_results, threads, debug, tmpdir):
+def generate_configfile(database, outdir, threshold, threads, debug, tmpdir):
   # Define config file
   config_file = "config/config.yaml"
 
@@ -45,8 +45,7 @@ def generate_configfile(database, outdir, threshold, append_results, threads, de
 
   config = {
     "database": database, "outdir": out_path, "threshold": threshold,
-    "append_results": append_results, "threads": threads, "debug": debug,
-    "tmpdir": tmpdir
+    "threads": threads, "debug": debug, "tmpdir": tmpdir
   }
 
   with open(config_file, "w") as config_yaml:
@@ -250,16 +249,15 @@ def parse_arguments():
   parser = argparse.ArgumentParser(description = "Screen read files and assemblies for Serovar biomarker genes, in order to preovide suggestions for isolate serovar. Currently only supporting Actinobacillus Pleuropneumoniae.")
   parser.add_argument("-r", metavar = "--reads_dir", dest = "reads_dir", help = "Input path to reads directory", required = False)
   parser.add_argument("-a", metavar = "--assembly_dir", dest = "assembly_dir", help = "Input path to assembly directory", required = False)
-  parser.add_argument("-D", metavar = "--database", dest = "database", help = "Path and prefix to kmer-aligner database", default = "./db/Actinobacillus_pleuropneumoniae")
+  parser.add_argument("-D", metavar = "--database", dest = "database", help = "Path and prefix to kmer-aligner database. (Default: %(default)s)", default = "./db/Actinobacillus_pleuropneumoniae")
   parser.add_argument("-o", metavar = "--outdir", dest = "outdir", help = "Output path to Results and Temporary files directory", required = True)
-  parser.add_argument("-T", metavar = "--theshold", dest = "threshold", help = "Cutoff threshold of match coverage and identity. Ignore threshold by setting to 0 or False. (Default 98)", default = 98)
-  parser.add_argument("-t", metavar = "--threads", dest = "threads", help = "Number of threads to allocate for the pipeline. (Default 3)", default = 3)
-  parser.add_argument("-R", dest = "append_results", help = "Append to existing results file. (Default False)", action = "store_true")
-  parser.add_argument("-k", dest = "keep_tmp", help = "Preserve temporary files such as KMA result files. (Default False)", action = "store_true")
-  parser.add_argument("-F", dest = "force", help = "Force rerun of all tasks in pipeline. (Default False)", action = "store_true")
-  parser.add_argument("-c", dest = "noconda", help = "Don't let snakemake handle conda execution in rules. Enable this option if the pipeline should run in the current loaded environment. (Default False)", action = "store_true")
-  parser.add_argument("-n", dest = "dry_run", help = "Perform a dry run with Snakemake to see jobs but without executing them. (Default False)", action = "store_true")
-  parser.add_argument("-d", dest = "debug", help = "Enable debug mode, stores snakemake object for inspection in R. (Default False)", action = "store_true")
+  parser.add_argument("-T", metavar = "--theshold", dest = "threshold", help = "Cutoff threshold of match coverage and identity. Ignore threshold by setting to 0 or False. (Default: %(default)s)", default = 98)
+  parser.add_argument("-t", metavar = "--threads", dest = "threads", help = "Number of threads to allocate for the pipeline. (Default: %(default)s)", default = 3)
+  parser.add_argument("-k", dest = "keep_tmp", help = "Preserve temporary files such as KMA result files. (Default: %(default)s)", action = "store_true")
+  parser.add_argument("-F", dest = "force", help = "Force rerun of all tasks in pipeline. (Default: %(default)s)", action = "store_true")
+  parser.add_argument("-c", dest = "noconda", help = "Don't let snakemake handle conda execution in rules. Enable this option if the pipeline should run in the current loaded environment. (Default: %(default)s)", action = "store_true")
+  parser.add_argument("-n", dest = "dry_run", help = "Perform a dry run with Snakemake to see jobs but without executing them. (Default: %(default)s)", action = "store_true")
+  parser.add_argument("-d", dest = "debug", help = "Enable debug mode, prints more messages and stores snakemake object for inspection in R. (Default: %(default)s)", action = "store_true")
 
   return(parser.parse_args())
 
@@ -270,7 +268,6 @@ args = parse_arguments()
 database = os.path.abspath(args.database)
 outdir = os.path.abspath(args.outdir)
 threshold = args.threshold
-append_results = args.append_results
 keep_tmp = args.keep_tmp
 threads = int(args.threads)
 force = args.force
@@ -293,7 +290,7 @@ else:
 validate_snakemake(debug)
 
 # Prepare config file for snakemake
-generate_configfile(database = database, outdir = outdir, threshold = threshold, append_results = append_results, threads = threads, debug = debug, tmpdir = tmpdir)
+generate_configfile(database = database, outdir = outdir, threshold = threshold, threads = threads, debug = debug, tmpdir = tmpdir)
 
 # Generate subsample sheet
 sample_files = generate_sheets(reads_dir = reads_dir, assembly_dir = assembly_dir, outdir = outdir, tmpdir = tmpdir)
@@ -318,25 +315,16 @@ if debug:
 
 
 results_file = f"{outdir}/serovars.tsv"
-do_append = append_results and os.path.isfile(results_file)
-if do_append:
-  results_tmp = os.path.splitext(results_file)[0] + ".tmp"
-  print(f"Copying {results_file} to {results_tmp}")
-  shutil.copy(results_file, results_tmp)
 
 snake_success = subprocess.Popen(snakemake_cmd, shell = True).wait()
 
 if snake_success == 0:
-  if do_append:
-    print("Appending new results to existing results")
-    serovar_new = pandas.read_csv(results_file, sep = "\t")
-    shutil.move(results_tmp, results_file)
-    serovar_new.to_csv(results_file, sep = "\t", index = False, mode = "a", header = False)
-
   if not keep_tmp:
     print("Cleaning up temporary files.")
     shutil.rmtree(tmpdir)
+  else:
+    print(f"Keeping all temporary files, inspect them at: {tmpdir}")
 
   print("All Done!")
 else:
-  print("Something went wrong while executing snakemake")
+  print("Something went wrong while executing snakemake.")

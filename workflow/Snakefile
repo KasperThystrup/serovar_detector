@@ -9,7 +9,6 @@ database = config["database"]
 outdir = config["outdir"]
 tmpdir = config["tmpdir"]
 threshold = config["threshold"]
-append_results = config["append_results"]
 debug = config["debug"]
 pepfile: f"{outdir}/schemas/project_config.yaml"
 
