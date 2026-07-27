@@ -205,7 +205,7 @@ def write_PEP(pepdir):
     print(f"Success: Overwriting {pep_file}")
 
 
-def generate_sheets(reads_dir, assembly_dir, enable_blacklist, blacklist_clean, outdir, blacklist_file, tmpdir):
+def generate_sheets(reads_dir, assembly_dir, outdir, tmpdir):
   # Generating dirs
   os.makedirs(outdir, exist_ok=True)
   os.makedirs(tmpdir, exist_ok=True)
@@ -215,19 +215,6 @@ def generate_sheets(reads_dir, assembly_dir, enable_blacklist, blacklist_clean, 
   assembly_metadata = screen_files(directory = assembly_dir, type = "Assembly")
 
   metadata = pandas.concat([reads_metadata, assembly_metadata], ignore_index = True, sort = True)
-
-  # Inspect blacklist if enabled
-  blacklist_exists = os.path.exists(blacklist_file)
-  if blacklist_exists:
-    print("Blacklist file detected, reading!")
-    blacklist = pandas.read_csv(blacklist_file, sep = "\t")
-
-    exclude_samples = blacklist["file"].values
-
-    # Filter metadata
-    metadata = metadata[~metadata["file"].isin(exclude_samples)].reset_index()
-    if not enable_blacklist:
-      print("Warning: Blacklist was included, yet current samples will NOT be added to the blacklist file!")
 
   # Ensuring not all samples have been filtered out
   sample_size = len(metadata.index)
@@ -253,34 +240,10 @@ def generate_sheets(reads_dir, assembly_dir, enable_blacklist, blacklist_clean, 
     # Generate PEP configuration files.
     write_PEP(pepdir)
   else:
-    print("No new samples detected after enable_blacklist.")
+    print("No samples detected.")
     sample_files = []
 
   return(sample_files)
-
-
-def update_blacklist(enable_blacklist, blacklist_file, blacklist_clean, sample_files):
-  blacklist_exists = os.path.isfile(blacklist_file)
-  include_header = not blacklist_exists or blacklist_clean
-
-  write = False
-  if enable_blacklist:
-    if not blacklist_clean:
-      mode = "a"
-      if blacklist_exists:
-        print("Appending to existing blacklist file")
-  elif blacklist_clean:
-    mode = "w"
-    if blacklist_exists:
-      print("Overwriting preexisting blacklist file")
-  elif not enable_blacklist and not blacklist_clean:
-      return(False)
-  else:
-      print("Created new blacklist file")
-
-  sample_files.to_csv(blacklist_file, sep = "\t", index=False, mode = mode, header = include_header)
-
-  return(True)
 
 
 def parse_arguments():
@@ -292,8 +255,6 @@ def parse_arguments():
   parser.add_argument("-T", metavar = "--theshold", dest = "threshold", help = "Cutoff threshold of match coverage and identity. Ignore threshold by setting to 0 or False. (Default 98)", default = 98)
   parser.add_argument("-t", metavar = "--threads", dest = "threads", help = "Number of threads to allocate for the pipeline. (Default 3)", default = 3)
   parser.add_argument("-R", dest = "append_results", help = "Append to existing results file. (Default False)", action = "store_true")
-  parser.add_argument("-b", dest = "enable_blacklist", help = "Update existing blacklist file with new samples. Creates a blacklist file if non exists. (Default False)", action = "store_true")
-  parser.add_argument("-B", dest = "blacklist_clean", help = "Ignore and overwrite existing blacklist file. Creates a blacklist if non exists. (Default False)", action = "store_true")
   parser.add_argument("-k", dest = "keep_tmp", help = "Preserve temporary files such as KMA result files. (Default False)", action = "store_true")
   parser.add_argument("-F", dest = "force", help = "Force rerun of all tasks in pipeline. (Default False)", action = "store_true")
   parser.add_argument("-c", dest = "noconda", help = "Don't let snakemake handle conda execution in rules. Enable this option if the pipeline should run in the current loaded environment. (Default False)", action = "store_true")
@@ -310,8 +271,6 @@ database = os.path.abspath(args.database)
 outdir = os.path.abspath(args.outdir)
 threshold = args.threshold
 append_results = args.append_results
-enable_blacklist = args.enable_blacklist
-blacklist_clean = args.blacklist_clean
 keep_tmp = args.keep_tmp
 threads = int(args.threads)
 force = args.force
@@ -319,7 +278,6 @@ noconda = args.noconda
 dry_run = args.dry_run
 debug = args.debug
 tmpdir = f"{outdir}/tmp"
-blacklist_file = f"{outdir}/blacklist.tsv"
 
 # Polish input
 if not args.reads_dir:
@@ -334,14 +292,11 @@ else:
 # Validate snakemake structure
 validate_snakemake(debug)
 
-if enable_blacklist and blacklist_clean and os.path.isfile(blacklist_file):
-  print("Blacklist file detected, in addition blacklist update and blacklist clean options has been selected. Don't know which to chose, please decide to either update existing blacklist ('-b') or make a clean blacklist ('-B'), not both!")
-
 # Prepare config file for snakemake
 generate_configfile(database = database, outdir = outdir, threshold = threshold, append_results = append_results, threads = threads, debug = debug, tmpdir = tmpdir)
 
 # Generate subsample sheet
-sample_files = generate_sheets(reads_dir = reads_dir, assembly_dir = assembly_dir, enable_blacklist = enable_blacklist, blacklist_clean = blacklist_clean, outdir = outdir, blacklist_file = blacklist_file, tmpdir = tmpdir)
+sample_files = generate_sheets(reads_dir = reads_dir, assembly_dir = assembly_dir, outdir = outdir, tmpdir = tmpdir)
 
 
 if len(sample_files) == 0:
@@ -351,7 +306,7 @@ if len(sample_files) == 0:
 snake_args = f"--cores {threads} "
 if not noconda:
   snake_args += "--use-conda "
-if force or blacklist_clean:
+if force:
   snake_args += "--forceall "
 if dry_run:
   snake_args += "--dryrun "
@@ -362,7 +317,7 @@ if debug:
   print(f"Executing: {snakemake_cmd}")
 
 
-results_file = f"{outdir}/serovar.tsv"
+results_file = f"{outdir}/serovars.tsv"
 do_append = append_results and os.path.isfile(results_file)
 if do_append:
   results_tmp = os.path.splitext(results_file)[0] + ".tmp"
@@ -371,11 +326,7 @@ if do_append:
 
 snake_success = subprocess.Popen(snakemake_cmd, shell = True).wait()
 
-if snake_success != 0:
-  print("Something went wrong while executing snakemake")
-else:
-  update_blacklist(enable_blacklist = enable_blacklist, blacklist_file = blacklist_file, blacklist_clean = blacklist_clean, sample_files = sample_files)
-
+if snake_success == 0:
   if do_append:
     print("Appending new results to existing results")
     serovar_new = pandas.read_csv(results_file, sep = "\t")
@@ -387,3 +338,5 @@ else:
     shutil.rmtree(tmpdir)
 
   print("All Done!")
+else:
+  print("Something went wrong while executing snakemake")
