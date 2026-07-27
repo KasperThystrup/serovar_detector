@@ -56,8 +56,8 @@ def generate_configfile(database, outdir, threshold, append_results, threads, de
 def screen_files(directory, type):
   if type == "Reads":
     # Screen for files
-    fastqs = [sample_read for sample_read in glob.glob("%s/*.fastq*" %directory)]
-    fqs = [sample_read for sample_read in glob.glob("%s/*.fq*" %directory)]
+    fastqs = [sample_read for sample_read in glob.glob(f"{directory}/*.fastq*")]
+    fqs = [sample_read for sample_read in glob.glob(f"{directory}/*.fq*")]
 
     # Combine file lists
     read_files = fastqs + fqs
@@ -79,8 +79,8 @@ def screen_files(directory, type):
 
   elif type == "Assembly":
     # Screen for files
-    fastas = [sample_assembly for sample_assembly in glob.glob("%s/*.fasta" %directory)]
-    fas = [sample_assembly for sample_assembly in glob.glob("%s/*.fa" %directory)]
+    fastas = [sample_assembly for sample_assembly in glob.glob(f"{directory}/*.fasta")]
+    fas = [sample_assembly for sample_assembly in glob.glob(f"{directory}/*.fa")]
 
     # Combine file lists
     assembly_files = fastas + fas
@@ -154,7 +154,7 @@ def make_sample_sheet(table):
     print("Failed: Subsample sheet has no rows")
     sample_sheet = False
 
-  print("Success: A total of %s samples have been annotated!" %len(sample_sheet.index))
+  print(f"Success: A total of {len(sample_sheet.index)} samples have been annotated!")
   return(sample_sheet)
 
 
@@ -165,9 +165,9 @@ def write_sample_sheet(sample_sheet, pepdir):
   print("Writting sample sheet", end = "... ")
   sample_sheet.to_csv(sample_file, index = False)
   if sample_exists:
-    print("Success: Overwritting %s" %sample_file)
+    print(f"Success: Overwritting {sample_file}")
   else:
-    print("Success: Written to %s" %sample_file)
+    print(f"Success: Written to {sample_file}")
 
 
 def write_subsample_sheet(subsample_sheet, pepdir):
@@ -178,9 +178,9 @@ def write_subsample_sheet(subsample_sheet, pepdir):
   subsample_sheet.to_csv(subsample_file, index = False)
 
   if subsample_exists:
-    print("Success: Overwritting %s" %subsample_file)
+    print(f"Success: Overwritting {subsample_file}")
   else:
-    print("Success: Written to %s" %subsample_file)
+    print(f"Success: Written to {subsample_file}")
 
 
 def write_PEP(pepdir):
@@ -200,9 +200,9 @@ def write_PEP(pepdir):
     config_file.write(PEP_subsample)
 
   if not pep_exists:
-    print("Success: Written to %s" %pep_file)
+    print(f"Success: Written to {pep_file}")
   elif pep_exists:
-    print("Success: Overwriting %s" %pep_file)
+    print(f"Success: Overwriting {pep_file}")
 
 
 def generate_sheets(reads_dir, assembly_dir, enable_blacklist, blacklist_clean, outdir, blacklist_file, tmpdir):
@@ -287,15 +287,16 @@ def parse_arguments():
   parser = argparse.ArgumentParser(description = "Screen read files and assemblies for Serovar biomarker genes, in order to preovide suggestions for isolate serovar. Currently only supporting Actinobacillus Pleuropneumoniae.")
   parser.add_argument("-r", metavar = "--reads_dir", dest = "reads_dir", help = "Input path to reads directory", required = False)
   parser.add_argument("-a", metavar = "--assembly_dir", dest = "assembly_dir", help = "Input path to assembly directory", required = False)
-  parser.add_argument("-D", metavar = "--database", dest = "database", help = "Path and prefix to kmer-aligner database", default = "./db")
+  parser.add_argument("-D", metavar = "--database", dest = "database", help = "Path and prefix to kmer-aligner database", default = "./db/Actinobacillus_pleuropneumoniae")
   parser.add_argument("-o", metavar = "--outdir", dest = "outdir", help = "Output path to Results and Temporary files directory", required = True)
   parser.add_argument("-T", metavar = "--theshold", dest = "threshold", help = "Cutoff threshold of match coverage and identity. Ignore threshold by setting to 0 or False. (Default 98)", default = 98)
+  parser.add_argument("-t", metavar = "--threads", dest = "threads", help = "Number of threads to allocate for the pipeline. (Default 3)", default = 3)
   parser.add_argument("-R", dest = "append_results", help = "Append to existing results file. (Default False)", action = "store_true")
   parser.add_argument("-b", dest = "enable_blacklist", help = "Update existing blacklist file with new samples. Creates a blacklist file if non exists. (Default False)", action = "store_true")
   parser.add_argument("-B", dest = "blacklist_clean", help = "Ignore and overwrite existing blacklist file. Creates a blacklist if non exists. (Default False)", action = "store_true")
   parser.add_argument("-k", dest = "keep_tmp", help = "Preserve temporary files such as KMA result files. (Default False)", action = "store_true")
-  parser.add_argument("-t", metavar = "--threads", dest = "threads", help = "Number of threads to allocate for the pipeline. (Default 3)", default = 3)
   parser.add_argument("-F", dest = "force", help = "Force rerun of all tasks in pipeline. (Default False)", action = "store_true")
+  parser.add_argument("-c", dest = "noconda", help = "Don't let snakemake handle conda execution in rules. Enable this option if the pipeline should run in the current loaded environment. (Default False)", action = "store_true")
   parser.add_argument("-n", dest = "dry_run", help = "Perform a dry run with Snakemake to see jobs but without executing them. (Default False)", action = "store_true")
   parser.add_argument("-d", dest = "debug", help = "Enable debug mode, stores snakemake object for inspection in R. (Default False)", action = "store_true")
 
@@ -312,8 +313,9 @@ append_results = args.append_results
 enable_blacklist = args.enable_blacklist
 blacklist_clean = args.blacklist_clean
 keep_tmp = args.keep_tmp
-threads = args.threads
+threads = int(args.threads)
 force = args.force
+noconda = args.noconda
 dry_run = args.dry_run
 debug = args.debug
 tmpdir = f"{outdir}/tmp"
@@ -346,21 +348,18 @@ if len(sample_files) == 0:
   print("Nothing to do exitting!")
   sys.exit(0)
 
-snake_args = ""
+snake_args = f"--cores {threads} "
+if not noconda:
+  snake_args += "--use-conda "
 if force or blacklist_clean:
-  snake_args += " -F "
+  snake_args += "--forceall "
 if dry_run:
-  snake_args += " -n "
+  snake_args += "--dryrun "
 
-# Use Snakemake's own conda envs only when explicitly requested. By default the
-# required tools (kma, R + packages, snakemake) are expected on PATH already
-# (e.g. provided by Galaxy's dependency resolver), so no per-run env building.
-# Set SEROVAR_DETECTOR_USE_CONDA=1 (or true/yes) to restore the old behaviour.
-_use_conda = os.environ.get("SEROVAR_DETECTOR_USE_CONDA", "").strip().lower() in ("1", "true", "yes")
-_conda_flag = "--use-conda " if _use_conda else ""
-snakemake_cmd = "snakemake %s--cores %s%s" %(_conda_flag, threads, snake_args)
+
+snakemake_cmd = f"snakemake {snake_args}"
 if debug:
-  print("Running command: %s" %snakemake_cmd)
+  print(f"Executing: {snakemake_cmd}")
 
 
 results_file = f"{outdir}/serovar.tsv"
