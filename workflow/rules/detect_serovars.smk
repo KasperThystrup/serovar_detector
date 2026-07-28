@@ -1,25 +1,31 @@
 rule detect_assembly_capsules:
   input:
-    assembly_file = "%s/assemblies/{sample}.fasta" %tmpdir
+    assembly = "%s/assemblies/{sample}.fasta" %tmpdir
   params:
-    db = database,
-    prefix =  "%s/assemblies/kma/{sample}" %tmpdir,
-    kma_dir = "%s/assemblies/kma" %tmpdir
+    db = blast_database
   output:
-    res_file = "%s/assemblies/kma/{sample}.res" %tmpdir
+    tsv = "%s/blast/{sample}.tsv" %tmpdir
   conda:
-    "../envs/kma.yaml"
+    "../envs/blast.yaml"
   threads:
     1
   message:
     """
-    mkdir -p {params.kma_dir}
-    kma -i {input.assembly_file} -o {params.prefix} -t_db {params.db} -t {threads}
+    OUTDIR=$(dirname {output.tsv})
+    mkdir -p $OUTDIR
+
+    printf 'Template\tAlignment_count\tAlignment_length\tTemplate_length\n' > {output.tsv}
+
+    blastn -subject {params.db} -query {input.assembly} -outfmt '6 sseqid nident length slen' >> {output.tsv}
     """
   shell:
     """
-    mkdir -p {params.kma_dir}
-    kma -i {input.assembly_file} -o {params.prefix} -t_db {params.db} -t {threads}
+    OUTDIR=$(dirname {output.tsv})
+    mkdir -p $OUTDIR
+
+    printf 'Template\tAlignment_count\tAlignment_length\tTemplate_length\n' > {output.tsv}
+
+    blastn -subject {params.db} -query {input.assembly} -outfmt '6 sseqid nident length slen' >> {output.tsv}
     """
 
 
@@ -29,10 +35,10 @@ rule detect_reads_capsules:
     mate2 = "%s/reads/{sample}_R2.fastq.gz" %tmpdir
   params:
     db = database,
-    prefix = "%s/reads/kma/{sample}" %tmpdir,
-    kma_dir = "%s/reads/kma" %tmpdir
+    prefix = "%s/kma/{sample}" %tmpdir,
+    kma_dir = "%s/kma" %tmpdir
   output:
-    res_file = "%s/reads/kma/{sample}.res" %tmpdir
+    res = "%s/kma/{sample}.res" %tmpdir
   conda:
     "../envs/kma.yaml"
   threads:

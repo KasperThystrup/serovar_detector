@@ -1,6 +1,5 @@
-channels:
- - conda-forge
+name: R
 dependencies:
- - r-essentials
- - r-logger
- - r-yaml
+ - conda-forge::r-essentials
+ - conda-forge::r-logger
+ - conda-forge::r-yaml

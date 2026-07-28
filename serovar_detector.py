@@ -30,7 +30,7 @@ def validate_snakemake(debug):
 
 def generate_configfile(database, outdir, threshold, threads, debug, tmpdir):
   # Define config file
-  config_file = "config/config.yaml"
+  config_file = f"{outdir}/config.yaml"
 
   # Check for existing config file
   if not os.path.isfile(config_file):
@@ -50,6 +50,8 @@ def generate_configfile(database, outdir, threshold, threads, debug, tmpdir):
 
   with open(config_file, "w") as config_yaml:
     yaml.dump(config, config_yaml)
+
+  return config_file
 
 
 def screen_files(directory, type):
@@ -99,9 +101,9 @@ def screen_files(directory, type):
     metadata = metadata_raw.sort_values(by = "sample_name")
 
   else:
-    return(pandas.DataFrame({"sample_name", "mate", "file", "type"}))
+    return pandas.DataFrame({"sample_name", "mate", "file", "type"})
 
-  return(metadata) #file_metadata
+  return metadata #file_metadata
 
 
 def create_symlinks(metadata, outdir):
@@ -154,7 +156,7 @@ def make_sample_sheet(table):
     sample_sheet = False
 
   print(f"Success: A total of {len(sample_sheet.index)} samples have been annotated!")
-  return(sample_sheet)
+  return sample_sheet
 
 
 def write_sample_sheet(sample_sheet, pepdir):
@@ -290,7 +292,7 @@ else:
 validate_snakemake(debug)
 
 # Prepare config file for snakemake
-generate_configfile(database = database, outdir = outdir, threshold = threshold, threads = threads, debug = debug, tmpdir = tmpdir)
+config_file = generate_configfile(database = database, outdir = outdir, threshold = threshold, threads = threads, debug = debug, tmpdir = tmpdir)
 
 # Generate subsample sheet
 sample_files = generate_sheets(reads_dir = reads_dir, assembly_dir = assembly_dir, outdir = outdir, tmpdir = tmpdir)
@@ -300,7 +302,7 @@ if len(sample_files) == 0:
   print("Nothing to do exitting!")
   sys.exit(0)
 
-snake_args = f"--cores {threads} "
+snake_args = f"--configfile {config_file} --cores {threads} "
 if not noconda:
   snake_args += "--use-conda "
 if force:
@@ -312,9 +314,6 @@ if dry_run:
 snakemake_cmd = f"snakemake {snake_args}"
 if debug:
   print(f"Executing: {snakemake_cmd}")
-
-
-results_file = f"{outdir}/serovars.tsv"
 
 snake_success = subprocess.Popen(snakemake_cmd, shell = True).wait()
 

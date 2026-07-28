@@ -3,8 +3,6 @@ import os
 import pandas
 import numpy
 
-configfile: "config/config.yaml"
-
 database = config["database"]
 outdir = config["outdir"]
 tmpdir = config["tmpdir"]
@@ -24,10 +22,11 @@ assembly_sheet = pandas.DataFrame({"sample_name": []})
 if "Assembly" in sample_sheet["type"].values:
   assembly_sheet = sample_grouped.get_group("Assembly")
 
+blast_database = database + ".fasta"
 
 rule all:
   input:
-    serovar = "%s/serovar.tsv" %outdir
+    serovar = "%s/serovars.tsv" %outdir
 
 
 include: "rules/detect_serovars.smk"

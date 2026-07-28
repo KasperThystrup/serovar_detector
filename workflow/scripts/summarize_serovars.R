@@ -1,38 +1,83 @@
-library(magrittr)
-
-
-read_res <- function(res_file){
+read_kma <- function(res_file){
   
   logger::log_debug("Performing pattern matching to determine sample name from file: ", res_file)
-  file_matches <- res_file %>%
-    basename %>%
-    stringr::str_match_all(pattern = "^(?<sample>[^\\.]+(\\.[^\\.]+)*)\\.(?<ext>\\w+)$") %>%
+  file_matches <- res_file |>
+    basename() |>
+    stringr::str_match_all(pattern = "^(?<sample>[^\\.]+(\\.[^\\.]+)*)\\.(?<ext>\\w+)$") |>
     as.data.frame()
 
   sample_name <- file_matches$sample
   
   logger::log_debug("Reading and updating headers.")
-  header <- res_file %>%
-    readr::read_lines(n_max = 1) %>%
-    strsplit(split = "\t") %>%
-    unlist
+  header <- res_file |>
+    readr::read_lines(n_max = 1) |>
+    strsplit(split = "\t") |>
+    unlist()
   
   header[1] <- "Template"
-  
-  logger::log_debug("Determining file modification date.")
-  timestamp <- file.mtime(res_file)
-  mod_date <- format(timestamp, format = "%Y-%m-%d")
-  
+
   logger::log_debug("Reading file.\n\n")
-  readr::read_tsv(file = res_file, col_names = header, col_types = "ciiiddddddd", skip = 1) %>%
+  readr::read_tsv(file = res_file, col_names = header, col_types = "ciiiddddddd", skip = 1) |>
     tidyr::separate(
       col = Template,
       into = c("Template_Gene", "Template_Strain", "Template_Serovar"),
       sep = "_"
-    ) %>%
+    ) |>
     # Adding sample name column
-    dplyr::mutate(Sample = sample_name, Date = mod_date)
+    dplyr::mutate(Sample = sample_name, Mapper = "KMA") |>
+    dplyr::select(Sample, Mapper, Template_Gene, Template_Strain, Template_Serovar, Template_Identity, Template_Coverage)
 }
+
+
+read_blast <- function(tsv_file){
+  logger::log_debug("Performing pattern matching to determine sample name from file: ", tsv_file)
+  file_matches <- tsv_file |>
+    basename() |>
+    stringr::str_match_all(pattern = "^(?<sample>[^\\.]+(\\.[^\\.]+)*)\\.(?<ext>\\w+)$") |>
+    as.data.frame()
+  
+  sample_name <- file_matches$sample
+  
+  logger::log_debug("Reading file.\n\n")
+  blast_raw <- readr::read_tsv(file = tsv_file, col_types = "ciii") |>
+    dplyr::mutate(
+      Sample = sample_name,
+      Mapper = "Blastn",
+      .before = 1
+    )
+  
+  if (nrow(blast_raw) == 0){
+    blast <- tibble::tibble(
+      Sample = character(),
+      Mapper = character(),
+      Template_Gene = character(),
+      Template_Strain = character(),
+      Template_Serovar = character(),
+      Template_Identity = numeric(),
+      Template_Coverage = numeric()
+    )
+    
+  } else {
+    blast_details <- tidyr::separate(
+      blast_raw,
+      col = Template,
+      into = c("Template_Gene", "Template_Strain", "Template_Serovar"),
+      sep = "_"
+    )
+    
+    # Adding sample name column
+    blast <- dplyr::mutate(
+      blast_details,
+      Template_Coverage = Alignment_length / Template_length * 100,
+      Template_Identity = Alignment_count / Template_length * 100
+    ) |>
+      dplyr::select(Sample, Mapper, Template_Gene, Template_Strain, Template_Serovar, Template_Identity, Template_Coverage)
+    
+  }
+  
+  return(blast)
+}
+
 
 
 apply_thresholds <- function(res_table, threshold){
@@ -75,44 +120,39 @@ generate_serovar_profiles <- function(serovar_config_yaml){
 }
 
 
-resolve_serovars <- function(kma_table, profiles){
-  
-  logger::log_debug("Extracting Date information")
-  kma_dates <- dplyr::select(kma_table, Sample, Date) %>%
-    dplyr::distinct()
+resolve_serovars <- function(results, serovar_profiles){
   
   logger::log_debug("Merging kma results with serovar profiles table.") ### Warnings!!!
-  kma_profile <- dplyr::select(
-    kma_table, 
-    Sample, Template_Gene, Template_Strain, Template_Serovar, Template_Identity,
+  profiles <- dplyr::select(
+    results, 
+    Sample, Mapper, Template_Gene, Template_Strain, Template_Serovar, Template_Identity,
     Template_Coverage, match_perfect, match_imperfect, match_partial
-  ) %>%
+  ) |>
     dplyr::left_join(
-      y = profiles, by = c("Template_Gene" = "Gene"), relationship = "many-to-many"
-    ) %>%
-    dplyr::group_by(Sample, Serovar)
+      y = serovar_profiles, by = c("Template_Gene" = "Gene"), relationship = "many-to-many"
+    ) |>
+    dplyr::group_by(Sample, Mapper, Serovar)
   
   logger::log_debug("Counting the capsule genes to determine repressentation of serovars.")
-  kma_overview <- dplyr::summarise(
-    kma_profile,
+  overview <- dplyr::summarise(
+    profiles,
     Gene_count = sum(c(match_perfect, match_imperfect)),
     .groups = "drop_last"
-  ) %>%
+  ) |>
     # Determine which serovars are best represented relative to capsule gene counts
     dplyr::reframe(
       Serovar,
       Gene_count,
-      selected = Gene_count == max(Gene_count),
-      .groups = "drop"
+      winner = Gene_count == max(Gene_count)
     )
   
   logger::log_debug("Counting expected amount of capsule genes for each serovar")
-  profiles_count <- dplyr::group_by(profiles, Serovar) %>%
+  profiles_count <- dplyr::group_by(profiles, Serovar) |>
     dplyr::summarise(capsule_count = dplyr::n(), .groups = "keep") ## .groups added
   
   logger::log_debug("Filtering the most repressented serovar and quantifying capsule gene frequency.")
-  serovar_suggestions <- subset(kma_overview, selected) %>%
-    dplyr::group_by(Sample) %>%
+  serovar_suggestions <- dplyr::filter(overview, winner) |>
+    dplyr::group_by(Sample) |>
     dplyr::summarise(
       suggestions = dplyr::n(),
       Serovar = paste(Serovar, collapse = ","),
@@ -123,9 +163,9 @@ resolve_serovars <- function(kma_table, profiles){
       .groups = "keep"
     )
   
-  serovars_raw <- dplyr::left_join(
+  serovars <- dplyr::left_join(
     x = serovar_suggestions, y = profiles_count, by = "Serovar"
-  ) %>%
+  ) |>
     dplyr::summarise(
       Sample,
       Suggested_serovar = dplyr::case_when(
@@ -140,15 +180,12 @@ resolve_serovars <- function(kma_table, profiles){
       ),
       .groups = "keep"
     )
-  
-  serovars <- dplyr::inner_join(x = serovars_raw, kma_dates, by = "Sample") %>%
-    dplyr::relocate(Date, .after = Sample)
-  
-  kma_merged <- dplyr::left_join(kma_profile, serovars, by = "Sample") %>%
+
+  merged <- dplyr::left_join(profiles, serovars, by = "Sample") |>
     dplyr::group_by(Sample, Template_Gene)
   
-  kma_detailed <- dplyr::mutate(
-    kma_merged,
+  detailed <- dplyr::mutate(
+    merged,
     member = any(Serovar == Suggested_serovar),
     gene_id = dplyr::case_when(
       Template_Identity == 100 ~ "",
@@ -164,13 +201,13 @@ resolve_serovars <- function(kma_table, profiles){
       TRUE ~ paste0(Template_Gene, " (", gene_id, gene_cov, ")")
     ),
     class = stringr::str_extract(string = Template_Gene, pattern = "\\w$")
-  ) %>%
-    dplyr::group_by(Sample) %>%
+  ) |>
+    dplyr::group_by(Sample, Mapper) |>
     dplyr::arrange(class)
   
   logger::log_debug("Defining and annotating accepted gene- and partial gene-matches.")
-  kma_genes <- dplyr::reframe(
-    kma_detailed,
+  genes_raw <- dplyr::reframe(
+    detailed,
     Serovar_match = dplyr::case_when(
       member & match_perfect ~ gene_detailed,
       member & match_imperfect ~ gene_detailed
@@ -186,12 +223,12 @@ resolve_serovars <- function(kma_table, profiles){
     Others_partial = dplyr::case_when(
       !member & match_partial ~ gene_detailed
     )
-  ) %>%
-    dplyr::group_by(Sample)
+  ) |>
+    dplyr::group_by(Sample, Mapper)
   
   logger::log_debug("Removing NA's and compressing accepted- and partial -genes into single columns.")
   genes <- dplyr::summarise(
-    kma_genes,
+    genes_raw,
     Serovar_match = paste0(unique(Serovar_match[!is.na(Serovar_match)]), collapse = ", "),
     Serovar_partial = paste0(unique(Serovar_partial[!is.na(Serovar_partial)]), collapse = ", "),
     Others_match = paste0(unique(Others_match[!is.na(Others_match)]), collapse = ", "),
@@ -204,45 +241,33 @@ resolve_serovars <- function(kma_table, profiles){
 }
   
 
-summarize_serovars <- function(kma_files, serovar_config_yaml, threshold, serovar_file){
-  logger::log_info("Reading and merging all .res files.")
-  res_table <- purrr::map_dfr(kma_files, read_res)
-  kma_table <- apply_thresholds(res_table, threshold)
+summarize_serovars <- function(blast_results, kma_results, serovar_config_yaml, threshold, serovar_file){
   
-  if (is.null(kma_table))
-    stop(
-      "No `.res` files detected! Check the kma results location: ",
-      dirname(kma_dir) %>%
-        unique
-    )
+  logger::log_info("Reading and merging all .res files.")
+  kma_table <- purrr::map_dfr(kma_results, read_kma)
+
+  blast_table <- purrr::map_dfr(blast_results, read_blast)
+  
+  all_results <- rbind(kma_table, blast_table)
+  
+  filtered <- apply_thresholds(all_results, threshold)
   
   logger::log_info("Generating serovar profiles from profile-config file.")
-  profiles <- generate_serovar_profiles(serovar_config_yaml)
+  serovar_profiles <- generate_serovar_profiles(serovar_config_yaml)
   
   logger::log_info("Determining the most frequently repressented serovars and serovar genes.")
-  results <- resolve_serovars(kma_table, profiles)
-  
-  if (file.exists(serovar_file)){
-    logger::log_info("Reading existing results")
-    results_old <- readr::read_tsv(serovar_file)
-    old_samples <- dplyr::pull(results_old, Sample)
-    results_new <- subset(results, !(Sample %in% old_samples))
-    results_merged <- dplyr::bind_rows(results_new, results_old)
-  }
+  results <- resolve_serovars(filtered, serovar_profiles)
   
   logger::log_info("Writing results to: ", serovar_file)
-  readr::write_tsv(x = dplyr::arrange(results, Date, Sample), file = serovar_file)
+  readr::write_tsv(x = dplyr::arrange(results, Sample), file = serovar_file)
   message("Success!")
 }
 
-assembly_results <- snakemake@input[["assembly_results"]]
-reads_results <- snakemake@input[["reads_results"]]
-threshold <- snakemake@params[["threshold"]]
-dbg <- snakemake@params[["debug"]]
-serovar_file <- snakemake@output[["serovar_file"]]
-
-
-kma_files <- c(assembly_results, reads_results)
+blast_results <- snakemake@input$blast_results
+kma_results <- snakemake@input$kma_results
+threshold <- snakemake@params$threshold
+dbg <- snakemake@params$debug
+serovar_file <- snakemake@output$serovar_file
 
 logger::log_threshold(level = logger::INFO)
 if (dbg){
@@ -259,8 +284,10 @@ if (dbg){
 }
 
 summarize_serovars(
-  kma_files = kma_files,
+  blast_results = blast_results,
+  kma_results = kma_results,
   serovar_config_yaml = "config/serovar_profiles.yaml",
   threshold = threshold,
   serovar_file = serovar_file
 )
+
