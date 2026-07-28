@@ -1,14 +1,12 @@
 # Serovar detector
 Actinobacillus pleuropneumoniae causes severe respiratory illness in production pigs and piglets. One major task in the prohobition of spread as well as treatment, is to identify the composition of capsule genes. These capsule genes can in combination be used too provide servariant typing of A. pleuropneumoniae.
 
-This repository provides a pipeline for detecting capsule genes and dessiminate serovar from combination of present genes. 
+This repository provides a pipeline for detecting capsule genes and dessiminate serovar from combination of present genes.
 
 # Setup
 ## Requirements
-* snakemake >= 8.+
-* conda >= 24.7.1
-
-I recommend creating a single Conda environment containing the **latest** versions of the required software
+* snakemake
+* conda >= 24.7.1 
 
 ## Installation
 1. (Recommendation) Use Micromamba or the like to set up an environment with the above requirement.
@@ -23,14 +21,6 @@ Assuming that you have navigated into the repository folder (e.g. ~/repos/serova
 ```
 python serovar_detector.py -r /path/to/input/reads -a /path/to/input/assemblies -D db/Actinobacillus_pleuropneumoniae -o /path/to/output/serovar_detector/ -t [nr. of threads]
 ```
-
-## Input
-Serovar detector supports multiple input types in a single run, but for any given sample only expects one of the following;
-* Illumina Paired end sequencing reads
-* Genome assemblies
-
-## Output
-A single tab-separated file `serovars.tsv`.
 
 ## Options
 ```
@@ -68,7 +58,3 @@ An overview of the available options:
                      in R. (Default False)
 ```
 
-# Citation
-If you are using our tool in your analysis, please consider to cite us.
-
-> Angen Ø, Karstensen KT, Vilaró A, et al. Serotyping of *Actinobacillus pleuropneumoniae* based on whole genome sequencing: validation of a bioinformatic tool. *Microb Genom.* 2025;11(7):001434. doi:10.1099/mgen.0.001434
