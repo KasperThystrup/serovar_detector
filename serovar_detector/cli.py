@@ -291,7 +291,7 @@ def main():
 
   snake_args = f"--snakefile {PKG_DIR}/workflow/Snakefile --configfile {config_file} --cores {threads} "
   if not noconda:
-    snake_args += "--use-conda "
+    snake_args += f"--use-conda --conda-prefix {PKG_DIR}/conda "
   if force:
     snake_args += "--forceall "
   if dry_run:
