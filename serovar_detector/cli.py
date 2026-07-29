@@ -303,87 +303,89 @@ def parse_arguments():
   return(parser.parse_args())
 
 
-# Derrive arguments
-args = parse_arguments()
+def main():
 
-database = os.path.abspath(args.database)
-outdir = os.path.abspath(args.outdir)
-threshold = args.threshold
-append_results = args.append_results
-enable_blacklist = args.enable_blacklist
-blacklist_clean = args.blacklist_clean
-keep_tmp = args.keep_tmp
-threads = int(args.threads)
-force = args.force
-noconda = args.noconda
-dry_run = args.dry_run
-debug = args.debug
-tmpdir = f"{outdir}/tmp"
-blacklist_file = f"{outdir}/blacklist.tsv"
+  # Derrive arguments
+  args = parse_arguments()
 
-# Polish input
-if not args.reads_dir:
-  reads_dir = args.reads_dir
-else:
-  reads_dir = os.path.abspath(args.reads_dir)
-if not args.assembly_dir:
-  assembly_dir = args.assembly_dir
-else:
-  assembly_dir = os.path.abspath(args.assembly_dir)
+  database = os.path.abspath(args.database)
+  outdir = os.path.abspath(args.outdir)
+  threshold = args.threshold
+  append_results = args.append_results
+  enable_blacklist = args.enable_blacklist
+  blacklist_clean = args.blacklist_clean
+  keep_tmp = args.keep_tmp
+  threads = int(args.threads)
+  force = args.force
+  noconda = args.noconda
+  dry_run = args.dry_run
+  debug = args.debug
+  tmpdir = f"{outdir}/tmp"
+  blacklist_file = f"{outdir}/blacklist.tsv"
 
-# Validate snakemake structure
-validate_snakemake(debug)
+  # Polish input
+  if not args.reads_dir:
+    reads_dir = args.reads_dir
+  else:
+    reads_dir = os.path.abspath(args.reads_dir)
+  if not args.assembly_dir:
+    assembly_dir = args.assembly_dir
+  else:
+    assembly_dir = os.path.abspath(args.assembly_dir)
 
-if enable_blacklist and blacklist_clean and os.path.isfile(blacklist_file):
-  print("Blacklist file detected, in addition blacklist update and blacklist clean options has been selected. Don't know which to chose, please decide to either update existing blacklist ('-b') or make a clean blacklist ('-B'), not both!")
+  # Validate snakemake structure
+  validate_snakemake(debug)
 
-# Prepare config file for snakemake
-generate_configfile(database = database, outdir = outdir, threshold = threshold, append_results = append_results, threads = threads, debug = debug, tmpdir = tmpdir)
+  if enable_blacklist and blacklist_clean and os.path.isfile(blacklist_file):
+    print("Blacklist file detected, in addition blacklist update and blacklist clean options has been selected. Don't know which to chose, please decide to either update existing blacklist ('-b') or make a clean blacklist ('-B'), not both!")
 
-# Generate subsample sheet
-sample_files = generate_sheets(reads_dir = reads_dir, assembly_dir = assembly_dir, enable_blacklist = enable_blacklist, blacklist_clean = blacklist_clean, outdir = outdir, blacklist_file = blacklist_file, tmpdir = tmpdir)
+  # Prepare config file for snakemake
+  generate_configfile(database = database, outdir = outdir, threshold = threshold, append_results = append_results, threads = threads, debug = debug, tmpdir = tmpdir)
 
-
-if len(sample_files) == 0:
-  print("Nothing to do exitting!")
-  sys.exit(0)
-
-snake_args = f"--cores {threads} "
-if not noconda:
-  snake_args += "--use-conda "
-if force or blacklist_clean:
-  snake_args += "--forceall "
-if dry_run:
-  snake_args += "--dryrun "
+  # Generate subsample sheet
+  sample_files = generate_sheets(reads_dir = reads_dir, assembly_dir = assembly_dir, enable_blacklist = enable_blacklist, blacklist_clean = blacklist_clean, outdir = outdir, blacklist_file = blacklist_file, tmpdir = tmpdir)
 
 
-snakemake_cmd = f"snakemake {snake_args}"
-if debug:
-  print(f"Executing: {snakemake_cmd}")
+  if len(sample_files) == 0:
+    print("Nothing to do exitting!")
+    sys.exit(0)
+
+  snake_args = f"--cores {threads} "
+  if not noconda:
+    snake_args += "--use-conda "
+  if force or blacklist_clean:
+    snake_args += "--forceall "
+  if dry_run:
+    snake_args += "--dryrun "
 
 
-results_file = f"{outdir}/serovar.tsv"
-do_append = append_results and os.path.isfile(results_file)
-if do_append:
-  results_tmp = os.path.splitext(results_file)[0] + ".tmp"
-  print(f"Copying {results_file} to {results_tmp}")
-  shutil.copy(results_file, results_tmp)
+  snakemake_cmd = f"snakemake {snake_args}"
+  if debug:
+    print(f"Executing: {snakemake_cmd}")
 
-snake_success = subprocess.Popen(snakemake_cmd, shell = True).wait()
 
-if snake_success != 0:
-  print("Something went wrong while executing snakemake")
-else:
-  update_blacklist(enable_blacklist = enable_blacklist, blacklist_file = blacklist_file, blacklist_clean = blacklist_clean, sample_files = sample_files)
-
+  results_file = f"{outdir}/serovar.tsv"
+  do_append = append_results and os.path.isfile(results_file)
   if do_append:
-    print("Appending new results to existing results")
-    serovar_new = pandas.read_csv(results_file, sep = "\t")
-    shutil.move(results_tmp, results_file)
-    serovar_new.to_csv(results_file, sep = "\t", index = False, mode = "a", header = False)
+    results_tmp = os.path.splitext(results_file)[0] + ".tmp"
+    print(f"Copying {results_file} to {results_tmp}")
+    shutil.copy(results_file, results_tmp)
 
-  if not keep_tmp:
-    print("Cleaning up temporary files.")
-    shutil.rmtree(tmpdir)
+  snake_success = subprocess.Popen(snakemake_cmd, shell = True).wait()
 
-  print("All Done!")
+  if snake_success != 0:
+    print("Something went wrong while executing snakemake")
+  else:
+    update_blacklist(enable_blacklist = enable_blacklist, blacklist_file = blacklist_file, blacklist_clean = blacklist_clean, sample_files = sample_files)
+
+    if do_append:
+      print("Appending new results to existing results")
+      serovar_new = pandas.read_csv(results_file, sep = "\t")
+      shutil.move(results_tmp, results_file)
+      serovar_new.to_csv(results_file, sep = "\t", index = False, mode = "a", header = False)
+
+    if not keep_tmp:
+      print("Cleaning up temporary files.")
+      shutil.rmtree(tmpdir)
+
+    print("All Done!")
