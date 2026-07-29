@@ -1,5 +1,4 @@
 .snakemake/
-config/
 schemas/
 ignore
 stashlist.txt

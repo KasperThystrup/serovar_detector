@@ -1,16 +1,20 @@
+from importlib import resources
 import sys
 import os
 import pandas
 import numpy
 
-configfile: "config/config.yaml"
+PKG_DIR = resources.files("serovar_detector")
+
+configfile: f"{PKG_DIR}/config/config.yaml"
 
 database = config["database"]
 outdir = config["outdir"]
-tmpdir = config["tmpdir"]
 threshold = config["threshold"]
+tmpdir = config["tmpdir"]
 debug = config["debug"]
 pepfile: f"{outdir}/schemas/project_config.yaml"
+serovar_profiles = f"{PKG_DIR}/config/serovar_profiles.yaml"
 
 sample_sheet = pep.sample_table
 

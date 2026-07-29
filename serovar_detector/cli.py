@@ -1,5 +1,6 @@
 #!/bin/python
 
+from importlib import resources
 import argparse
 import os
 import sys
@@ -10,27 +11,13 @@ import re
 import pandas
 import shutil
 
+# Define package installation folder
 
-def validate_snakemake(debug):
-  here = os.listdir('.')
-  workflow_here = 'workflow' in os.listdir('.')
-
-  if (workflow_here):
-    snakefile_here = "Snakefile" in os.listdir('workflow')
-
-    if snakefile_here and debug:
-      print("Snakefile detected")
-    elif not snakefile_here:
-      print('Error no Snakefile detected in workflow directory. Software is properbly corrupt, consider redownloading.')
-      sys.exit(1)
-  else:
-    print('No workflow directory detected, are you sure you are running the script from the software folder?')
-    sys.exit(1)
-
+PKG_DIR = resources.files("serovar_detector")
 
 def generate_configfile(database, outdir, threshold, threads, debug, tmpdir):
   # Define config file
-  config_file = "config/config.yaml"
+  config_file = f"{PKG_DIR}/config/config.yaml"
 
   # Check for existing config file
   if not os.path.isfile(config_file):
@@ -45,7 +32,7 @@ def generate_configfile(database, outdir, threshold, threads, debug, tmpdir):
 
   config = {
     "database": database, "outdir": out_path, "threshold": threshold,
-    "threads": threads, "debug": debug, "tmpdir": tmpdir
+    "tmpdir": tmpdir, "debug": debug, "threads": threads
   }
 
   with open(config_file, "w") as config_yaml:
@@ -249,7 +236,7 @@ def parse_arguments():
   parser = argparse.ArgumentParser(description = "Screen read files and assemblies for Serovar biomarker genes, in order to preovide suggestions for isolate serovar. Currently only supporting Actinobacillus Pleuropneumoniae.")
   parser.add_argument("-r", metavar = "--reads_dir", dest = "reads_dir", help = "Input path to reads directory", required = False)
   parser.add_argument("-a", metavar = "--assembly_dir", dest = "assembly_dir", help = "Input path to assembly directory", required = False)
-  parser.add_argument("-D", metavar = "--database", dest = "database", help = "Path and prefix to kmer-aligner database. (Default: %(default)s)", default = "./db/Actinobacillus_pleuropneumoniae")
+  parser.add_argument("-D", metavar = "--database", dest = "database", help = "Path and prefix to kmer-aligner database. (Default: %(default)s)", default = f"{PKG_DIR}/db/Actinobacillus_pleuropneumoniae")
   parser.add_argument("-o", metavar = "--outdir", dest = "outdir", help = "Output path to Results and Temporary files directory", required = True)
   parser.add_argument("-T", metavar = "--theshold", dest = "threshold", help = "Cutoff threshold of match coverage and identity. Ignore threshold by setting to 0 or False. (Default: %(default)s)", default = 98)
   parser.add_argument("-t", metavar = "--threads", dest = "threads", help = "Number of threads to allocate for the pipeline. (Default: %(default)s)", default = 3)
@@ -270,9 +257,6 @@ def main():
   database = os.path.abspath(args.database)
   outdir = os.path.abspath(args.outdir)
   threshold = args.threshold
-  append_results = args.append_results
-  enable_blacklist = args.enable_blacklist
-  blacklist_clean = args.blacklist_clean
   keep_tmp = args.keep_tmp
   threads = int(args.threads)
   force = args.force
@@ -280,7 +264,6 @@ def main():
   dry_run = args.dry_run
   debug = args.debug
   tmpdir = f"{outdir}/tmp"
-  blacklist_file = f"{outdir}/blacklist.tsv"
 
   # Polish input
   if not args.reads_dir:
@@ -302,14 +285,13 @@ def main():
     print("Nothing to do exitting!")
     sys.exit(0)
 
-  snake_args = f"--cores {threads} "
+  snake_args = f"--snakefile {PKG_DIR}/workflow/Snakefile --cores {threads} "
   if not noconda:
     snake_args += "--use-conda "
-  if force or blacklist_clean:
+  if force:
     snake_args += "--forceall "
   if dry_run:
     snake_args += "--dryrun "
-
 
   snakemake_cmd = f"snakemake {snake_args}"
   if debug:
@@ -329,4 +311,3 @@ def main():
     print("All Done!")
   else:
     print("Something went wrong while executing snakemake.")
-
