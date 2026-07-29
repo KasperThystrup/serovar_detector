@@ -262,69 +262,71 @@ def parse_arguments():
   return(parser.parse_args())
 
 
-# Derrive arguments
-args = parse_arguments()
+def main():
 
-database = os.path.abspath(args.database)
-outdir = os.path.abspath(args.outdir)
-threshold = args.threshold
-keep_tmp = args.keep_tmp
-threads = int(args.threads)
-force = args.force
-noconda = args.noconda
-dry_run = args.dry_run
-debug = args.debug
-tmpdir = f"{outdir}/tmp"
+  # Derrive arguments
+  args = parse_arguments()
 
-# Polish input
-if not args.reads_dir:
-  reads_dir = args.reads_dir
-else:
-  reads_dir = os.path.abspath(args.reads_dir)
-if not args.assembly_dir:
-  assembly_dir = args.assembly_dir
-else:
-  assembly_dir = os.path.abspath(args.assembly_dir)
+  database = os.path.abspath(args.database)
+  outdir = os.path.abspath(args.outdir)
+  threshold = args.threshold
+  append_results = args.append_results
+  enable_blacklist = args.enable_blacklist
+  blacklist_clean = args.blacklist_clean
+  keep_tmp = args.keep_tmp
+  threads = int(args.threads)
+  force = args.force
+  noconda = args.noconda
+  dry_run = args.dry_run
+  debug = args.debug
+  tmpdir = f"{outdir}/tmp"
+  blacklist_file = f"{outdir}/blacklist.tsv"
 
-# Validate snakemake structure
-validate_snakemake(debug)
-
-# Prepare config file for snakemake
-generate_configfile(database = database, outdir = outdir, threshold = threshold, threads = threads, debug = debug, tmpdir = tmpdir)
-
-# Generate subsample sheet
-sample_files = generate_sheets(reads_dir = reads_dir, assembly_dir = assembly_dir, outdir = outdir, tmpdir = tmpdir)
-
-
-if len(sample_files) == 0:
-  print("Nothing to do exitting!")
-  sys.exit(0)
-
-snake_args = f"--cores {threads} "
-if not noconda:
-  snake_args += "--use-conda "
-if force:
-  snake_args += "--forceall "
-if dry_run:
-  snake_args += "--dryrun "
-
-
-snakemake_cmd = f"snakemake {snake_args}"
-if debug:
-  print(f"Executing: {snakemake_cmd}")
-
-
-results_file = f"{outdir}/serovars.tsv"
-
-snake_success = subprocess.Popen(snakemake_cmd, shell = True).wait()
-
-if snake_success == 0:
-  if not keep_tmp:
-    print("Cleaning up temporary files.")
-    shutil.rmtree(tmpdir)
+  # Polish input
+  if not args.reads_dir:
+    reads_dir = args.reads_dir
   else:
-    print(f"Keeping all temporary files, inspect them at: {tmpdir}")
+    reads_dir = os.path.abspath(args.reads_dir)
+  if not args.assembly_dir:
+    assembly_dir = args.assembly_dir
+  else:
+    assembly_dir = os.path.abspath(args.assembly_dir)
 
-  print("All Done!")
-else:
-  print("Something went wrong while executing snakemake.")
+  # Prepare config file for snakemake
+  generate_configfile(database = database, outdir = outdir, threshold = threshold, threads = threads, debug = debug, tmpdir = tmpdir)
+
+  # Generate subsample sheet
+  sample_files = generate_sheets(reads_dir = reads_dir, assembly_dir = assembly_dir, outdir = outdir, tmpdir = tmpdir)
+
+  if len(sample_files) == 0:
+    print("Nothing to do exitting!")
+    sys.exit(0)
+
+  snake_args = f"--cores {threads} "
+  if not noconda:
+    snake_args += "--use-conda "
+  if force or blacklist_clean:
+    snake_args += "--forceall "
+  if dry_run:
+    snake_args += "--dryrun "
+
+
+  snakemake_cmd = f"snakemake {snake_args}"
+  if debug:
+    print(f"Executing: {snakemake_cmd}")
+
+  results_file = f"{outdir}/serovars.tsv"
+
+  snake_success = subprocess.Popen(snakemake_cmd, shell = True).wait()
+
+  if snake_success == 0:
+    if not keep_tmp:
+      print("Cleaning up temporary files.")
+      shutil.rmtree(tmpdir)
+    else:
+      print(f"Keeping all temporary files, inspect them at: {tmpdir}")
+
+    print("All Done!")
+  else:
+    print("Something went wrong while executing snakemake.")
+
