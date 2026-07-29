@@ -4,6 +4,7 @@ rule summarize_serovars:
 		kma_results = expand(rules.detect_reads_capsules.output.res, sample = reads_sheet["sample_name"].values.tolist())
 	params:
 		threshold = threshold,
+		serovar_profiles = serovar_profiles,
 		debug = debug
 	output:
 		serovar_file = "%s/serovars.tsv" %outdir

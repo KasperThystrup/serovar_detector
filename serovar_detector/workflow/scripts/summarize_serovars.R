@@ -266,6 +266,7 @@ summarize_serovars <- function(blast_results, kma_results, serovar_config_yaml, 
 blast_results <- snakemake@input$blast_results
 kma_results <- snakemake@input$kma_results
 threshold <- snakemake@params$threshold
+serovar_profiles <- snakemake@params$serovar_profiles
 dbg <- snakemake@params$debug
 serovar_file <- snakemake@output$serovar_file
 
@@ -286,7 +287,7 @@ if (dbg){
 summarize_serovars(
   blast_results = blast_results,
   kma_results = kma_results,
-  serovar_config_yaml = "config/serovar_profiles.yaml",
+  serovar_config_yaml = serovar_profiles,
   threshold = threshold,
   serovar_file = serovar_file
 )

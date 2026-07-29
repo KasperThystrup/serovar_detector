@@ -1,5 +1,6 @@
 #!/bin/python
 
+from importlib import resources
 import argparse
 import os
 import sys
@@ -10,23 +11,9 @@ import re
 import pandas
 import shutil
 
+# Define package installation folder
 
-def validate_snakemake(debug):
-  here = os.listdir('.')
-  workflow_here = 'workflow' in os.listdir('.')
-
-  if (workflow_here):
-    snakefile_here = "Snakefile" in os.listdir('workflow')
-
-    if snakefile_here and debug:
-      print("Snakefile detected")
-    elif not snakefile_here:
-      print('Error no Snakefile detected in workflow directory. Software is properbly corrupt, consider redownloading.')
-      sys.exit(1)
-  else:
-    print('No workflow directory detected, are you sure you are running the script from the software folder?')
-    sys.exit(1)
-
+PKG_DIR = resources.files("serovar_detector")
 
 def generate_configfile(database, outdir, threshold, threads, debug, tmpdir):
   # Define config file
@@ -45,7 +32,7 @@ def generate_configfile(database, outdir, threshold, threads, debug, tmpdir):
 
   config = {
     "database": database, "outdir": out_path, "threshold": threshold,
-    "threads": threads, "debug": debug, "tmpdir": tmpdir
+    "tmpdir": tmpdir, "debug": debug, "threads": threads
   }
 
   with open(config_file, "w") as config_yaml:
@@ -251,7 +238,7 @@ def parse_arguments():
   parser = argparse.ArgumentParser(description = "Screen read files and assemblies for Serovar biomarker genes, in order to preovide suggestions for isolate serovar. Currently only supporting Actinobacillus Pleuropneumoniae.")
   parser.add_argument("-r", metavar = "--reads_dir", dest = "reads_dir", help = "Input path to reads directory", required = False)
   parser.add_argument("-a", metavar = "--assembly_dir", dest = "assembly_dir", help = "Input path to assembly directory", required = False)
-  parser.add_argument("-D", metavar = "--database", dest = "database", help = "Path and prefix to kmer-aligner database. (Default: %(default)s)", default = "./db/Actinobacillus_pleuropneumoniae")
+  parser.add_argument("-D", metavar = "--database", dest = "database", help = "Path and prefix to kmer-aligner database. (Default: %(default)s)", default = f"{PKG_DIR}/db/Actinobacillus_pleuropneumoniae")
   parser.add_argument("-o", metavar = "--outdir", dest = "outdir", help = "Output path to Results and Temporary files directory", required = True)
   parser.add_argument("-T", metavar = "--theshold", dest = "threshold", help = "Cutoff threshold of match coverage and identity. Ignore threshold by setting to 0 or False. (Default: %(default)s)", default = 98)
   parser.add_argument("-t", metavar = "--threads", dest = "threads", help = "Number of threads to allocate for the pipeline. (Default: %(default)s)", default = 3)
@@ -264,66 +251,66 @@ def parse_arguments():
   return(parser.parse_args())
 
 
-# Derrive arguments
-args = parse_arguments()
+def main():
 
-database = os.path.abspath(args.database)
-outdir = os.path.abspath(args.outdir)
-threshold = args.threshold
-keep_tmp = args.keep_tmp
-threads = int(args.threads)
-force = args.force
-noconda = args.noconda
-dry_run = args.dry_run
-debug = args.debug
-tmpdir = f"{outdir}/tmp"
+  # Derrive arguments
+  args = parse_arguments()
 
-# Polish input
-if not args.reads_dir:
-  reads_dir = args.reads_dir
-else:
-  reads_dir = os.path.abspath(args.reads_dir)
-if not args.assembly_dir:
-  assembly_dir = args.assembly_dir
-else:
-  assembly_dir = os.path.abspath(args.assembly_dir)
-
-# Validate snakemake structure
-validate_snakemake(debug)
-
-# Prepare config file for snakemake
-config_file = generate_configfile(database = database, outdir = outdir, threshold = threshold, threads = threads, debug = debug, tmpdir = tmpdir)
-
-# Generate subsample sheet
-sample_files = generate_sheets(reads_dir = reads_dir, assembly_dir = assembly_dir, outdir = outdir, tmpdir = tmpdir)
+  database = os.path.abspath(args.database)
+  outdir = os.path.abspath(args.outdir)
+  threshold = args.threshold
+  keep_tmp = args.keep_tmp
+  threads = int(args.threads)
+  force = args.force
+  noconda = args.noconda
+  dry_run = args.dry_run
+  debug = args.debug
+  tmpdir = f"{outdir}/tmp"
 
 
-if len(sample_files) == 0:
-  print("Nothing to do exitting!")
-  sys.exit(0)
-
-snake_args = f"--configfile {config_file} --cores {threads} "
-if not noconda:
-  snake_args += "--use-conda "
-if force:
-  snake_args += "--forceall "
-if dry_run:
-  snake_args += "--dryrun "
-
-
-snakemake_cmd = f"snakemake {snake_args}"
-if debug:
-  print(f"Executing: {snakemake_cmd}")
-
-snake_success = subprocess.Popen(snakemake_cmd, shell = True).wait()
-
-if snake_success == 0:
-  if not keep_tmp:
-    print("Cleaning up temporary files.")
-    shutil.rmtree(tmpdir)
+  # Polish input
+  if not args.reads_dir:
+    reads_dir = args.reads_dir
   else:
-    print(f"Keeping all temporary files, inspect them at: {tmpdir}")
+    reads_dir = os.path.abspath(args.reads_dir)
+  if not args.assembly_dir:
+    assembly_dir = args.assembly_dir
+  else:
+    assembly_dir = os.path.abspath(args.assembly_dir)
 
-  print("All Done!")
-else:
-  print("Something went wrong while executing snakemake.")
+  # Prepare config file for snakemake
+  config_file = generate_configfile(database = database, outdir = outdir, threshold = threshold, threads = threads, debug = debug, tmpdir = tmpdir)
+
+  # Generate subsample sheet
+  sample_files = generate_sheets(reads_dir = reads_dir, assembly_dir = assembly_dir, outdir = outdir, tmpdir = tmpdir)
+
+
+  if len(sample_files) == 0:
+    print("Nothing to do exitting!")
+    sys.exit(0)
+
+  snake_args = f"--snakefile {PKG_DIR}/workflow/Snakefile --configfile {config_file} --cores {threads} "
+  if not noconda:
+    snake_args += "--use-conda "
+  if force:
+    snake_args += "--forceall "
+  if dry_run:
+    snake_args += "--dryrun "
+
+
+  snakemake_cmd = f"snakemake {snake_args}"
+  if debug:
+    print(f"Executing: {snakemake_cmd}")
+
+  snake_success = subprocess.Popen(snakemake_cmd, shell = True).wait()
+
+  if snake_success == 0:
+    if not keep_tmp:
+      print("Cleaning up temporary files.")
+      shutil.rmtree(tmpdir)
+    else:
+      print(f"Keeping all temporary files, inspect them at: {tmpdir}")
+
+    print("All Done!")
+  else:
+    print("Something went wrong while executing snakemake.")
