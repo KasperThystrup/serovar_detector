@@ -134,14 +134,15 @@ resolve_serovars <- function(results, serovar_profiles){
     dplyr::group_by(Sample, Mapper, Serovar)
   
   logger::log_debug("Counting the capsule genes to determine repressentation of serovars.")
-  overview <- dplyr::summarise(
+  overview <- dplyr::reframe(
     profiles,
-    Gene_count = sum(c(match_perfect, match_imperfect)),
-    .groups = "drop_last"
+    Gene_count = sum(c(match_perfect, match_imperfect))
   ) |>
+    dplyr::group_by(Sample) |>
     # Determine which serovars are best represented relative to capsule gene counts
     dplyr::reframe(
       Serovar,
+      Mapper,
       Gene_count,
       winner = Gene_count == max(Gene_count)
     )
