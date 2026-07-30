@@ -136,7 +136,7 @@ def make_sample_sheet(table):
   file_count = len(table.index)
 
   if file_count > 0:
-    sample_subset = table[["sample_name", "type"]]
+    sample_subset = table[["sample_name"]]
     sample_sheet = sample_subset.drop_duplicates()
   else:
     print("Failed: Subsample sheet has no rows")
@@ -221,7 +221,7 @@ def generate_sheets(reads_dir, assembly_dir, outdir, tmpdir):
     sample_sheet = make_sample_sheet(metadata)
     sample_sheet_updated = write_sample_sheet(sample_sheet, pepdir)
 
-    subsample_sheet = metadata[["sample_name", "mate", "file"]]
+    subsample_sheet = metadata[["sample_name", "type", "mate", "file"]]
     subsample_sheet_updated = write_subsample_sheet(subsample_sheet, pepdir)
     sample_files = metadata['file']
 

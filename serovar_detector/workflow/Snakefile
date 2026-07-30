@@ -14,17 +14,23 @@ debug = config["debug"]
 pepfile: f"{outdir}/schemas/project_config.yaml"
 serovar_profiles = f"{PKG_DIR}/config/serovar_profiles.yaml"
 
-sample_sheet = pep.sample_table
+print(pep)
 
-sample_grouped = sample_sheet.groupby("type")
+subsample_table = pep.subsample_table
+
+sample_grouped = subsample_table.groupby("type")
 
 reads_sheet = pandas.DataFrame({"sample_name": []})
-if "Reads" in sample_sheet["type"].values:
+if "Reads" in subsample_table["type"].values:
   reads_sheet = sample_grouped.get_group("Reads")
+  reads_samples = set(reads_sheet["sample_name"])
 
 assembly_sheet = pandas.DataFrame({"sample_name": []})
-if "Assembly" in sample_sheet["type"].values:
+if "Assembly" in subsample_table["type"].values:
   assembly_sheet = sample_grouped.get_group("Assembly")
+  assembly_samples = set(assembly_sheet["sample_name"])
+
+print(reads_samples)
 
 blast_database = database + ".fasta"
 

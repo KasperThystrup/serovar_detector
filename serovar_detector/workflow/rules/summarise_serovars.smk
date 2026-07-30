@@ -1,7 +1,7 @@
 rule summarize_serovars:
 	input:
-		blast_results = expand(rules.detect_assembly_capsules.output.tsv, sample = assembly_sheet["sample_name"].values.tolist()),
-		kma_results = expand(rules.detect_reads_capsules.output.res, sample = reads_sheet["sample_name"].values.tolist())
+		blast_results = expand(rules.detect_assembly_capsules.output.tsv, sample = assembly_samples),
+		kma_results = expand(rules.detect_reads_capsules.output.res, sample = reads_samples)
 	params:
 		threshold = threshold,
 		serovar_profiles = serovar_profiles,

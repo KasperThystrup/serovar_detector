@@ -138,11 +138,12 @@ resolve_serovars <- function(results, serovar_profiles){
     profiles,
     Gene_count = sum(c(match_perfect, match_imperfect))
   ) |>
-    dplyr::group_by(Sample) |>
+    
+    # If Mapper is removed here, it will be affected by winner-takes-it-all
+    dplyr::group_by(Sample, Mapper) |>
     # Determine which serovars are best represented relative to capsule gene counts
     dplyr::reframe(
       Serovar,
-      Mapper,
       Gene_count,
       winner = Gene_count == max(Gene_count)
     )
@@ -153,7 +154,7 @@ resolve_serovars <- function(results, serovar_profiles){
   
   logger::log_debug("Filtering the most repressented serovar and quantifying capsule gene frequency.")
   serovar_suggestions <- dplyr::filter(overview, winner) |>
-    dplyr::group_by(Sample) |>
+    dplyr::group_by(Sample, Mapper) |>
     dplyr::summarise(
       suggestions = dplyr::n(),
       Serovar = paste(Serovar, collapse = ","),
@@ -182,7 +183,7 @@ resolve_serovars <- function(results, serovar_profiles){
       .groups = "keep"
     )
 
-  merged <- dplyr::left_join(profiles, serovars, by = "Sample") |>
+  merged <- dplyr::left_join(profiles, serovars, by = c("Sample", "Mapper")) |>
     dplyr::group_by(Sample, Template_Gene)
   
   detailed <- dplyr::mutate(
@@ -237,7 +238,7 @@ resolve_serovars <- function(results, serovar_profiles){
     .groups = "drop"
   )
   
-  dplyr::left_join(serovars, genes, by = "Sample")
+  dplyr::left_join(serovars, genes, by = c("Sample", "Mapper"))
     
 }
   
