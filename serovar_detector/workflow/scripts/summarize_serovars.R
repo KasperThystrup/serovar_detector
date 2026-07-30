@@ -148,7 +148,7 @@ resolve_serovars <- function(results, serovar_profiles){
     )
   
   logger::log_debug("Counting expected amount of capsule genes for each serovar")
-  profiles_count <- dplyr::group_by(profiles, Serovar) |>
+  profiles_count <- dplyr::group_by(serovar_profiles, Serovar) |>
     dplyr::summarise(capsule_count = dplyr::n(), .groups = "keep") ## .groups added
   
   logger::log_debug("Filtering the most repressented serovar and quantifying capsule gene frequency.")

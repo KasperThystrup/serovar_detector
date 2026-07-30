@@ -11,8 +11,8 @@ requires-python = ">=3.8"
 license = {file = "LICENSE"}
 dependencies = [
     "snakemake>=8.0",
-    "conda",
     "pandas",
+    "peppy",
 ]
 authors = [
     {name = "Kasper Thystrup Karstensen", email = "kathka@gmail.com"}

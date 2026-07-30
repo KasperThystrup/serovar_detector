@@ -7,3 +7,4 @@ slurm*
 .gitignore
 *.swp
 .DS_Store
+dist/
