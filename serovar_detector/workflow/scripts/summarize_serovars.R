@@ -63,8 +63,12 @@ read_blast <- function(tsv_file){
       col = Template,
       into = c("Template_Gene", "Template_Strain", "Template_Serovar"),
       sep = "_"
-    )
-    
+    ) |>
+      dplyr::group_by(Sample, Template_Gene) |>
+      dplyr::filter(Alignment_length == max(Alignment_length)) |>
+      dplyr::filter(Alignment_length == max(Alignment_length)) |>
+      dplyr::slice(1)
+
     # Adding sample name column
     blast <- dplyr::mutate(
       blast_details,
