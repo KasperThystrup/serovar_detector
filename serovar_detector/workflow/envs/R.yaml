@@ -1,0 +1,5 @@
+name: R
+dependencies:
+ - conda-forge::r-essentials
+ - conda-forge::r-logger
+ - conda-forge::r-yaml

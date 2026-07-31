@@ -1,5 +1,4 @@
 .snakemake/
-config/
 schemas/
 ignore
 stashlist.txt
@@ -8,3 +7,4 @@ slurm*
 .gitignore
 *.swp
 .DS_Store
+dist/
