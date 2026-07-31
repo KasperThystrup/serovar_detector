@@ -3,70 +3,77 @@ Actinobacillus pleuropneumoniae causes severe respiratory illness in production 
 
 This repository provides a pipeline for detecting capsule genes and dessiminate serovar from combination of present genes. 
 
+# Quick start
+```
+# Install once only
+micromamba create -n serovar_detector bioconda::serovar_detector --yes
+
+# Execution
+micromamba run -n serovar_detector serovar_detector -r /path/to/input/reads -a /path/to/input/assemblies -o /path/to/output
+```
 # Setup
+## Micromamba/Conda
+Serovar detector is hosted on bioconda, so requirements can be automatically fixed by installing through there. 
+```
+micromamba create -n serovar_detector bioconda::serovar_detector
+```
+
+## Pip installation
+Serovar detector is hosted on pypi, since serovar detector uses conda to manage the required tools automatically, you would have to install conda in the environment for which you install serovar detector. This means that you would have to create an environment using micromamba/conda which contains conda and then you can install this package from pypi.
+```
+# If conda isn't preinstalled on your system
+micromamba create -n serovar_detector conda-forge::conda
+
+micromamba run -n serovar_detector pip install serovar_detector
+```
+
+### Alternative to Conda
+IF you don't wish to involve conda at all, due to e.g. server restrictions or hosting on third party platforms (such as Galaxy), you could look through the `serovar_detector/workflow/envs` files and try to replicate an environment containing these tools as well as the tools listed in **Requirements** section (except `conda`). In theory if these tool can exist within the same environment, you can skip conda handling entirely by adding the `-c` flag (e.g. `serovar_detector ... -c`), it's untested and unsupported though.
+
 ## Requirements
+While there are several other tools being used, standard usage assumes that Snakemake automatically should handle installation of downstream software.
+Here's the requirement for Serovar detector:
 * snakemake >= 8.+
+* pandas
+* peppy
 * conda >= 24.7.1
 
-I recommend creating a single Conda environment containing the **latest** versions of the required software
-
-## Installation
-1. (Recommendation) Use Micromamba or the like to set up an environment with the above requirement.
-2. Clone repository to desired location (e.g. ~/repos)
-```
-git clone https://github.com/KasperThystrup/serovar_detector.git ~/repos/serovar_detector
-```
-
 # Usage
-## Quick start
-Assuming that you have navigated into the repository folder (e.g. ~/repos/serovar_detector) and are executing the command from an conda environment with installed requirements.
 ```
-python serovar_detector.py -r /path/to/input/reads -a /path/to/input/assemblies -D db/Actinobacillus_pleuropneumoniae -o /path/to/output/serovar_detector/ -t [nr. of threads]
+serovar_detector -r /path/to/input/reads -a /path/to/input/assemblies -o /path/to/output -t 4
 ```
-
 ## Input
-Serovar detector supports multiple input types in a single run, but for any given sample only expects one of the following;
-* Illumina Paired end sequencing reads
-* Genome assemblies
+Serovar detector assumes use of either Illumina Paired end sequencing data or preassembled genomes. The top level of the reads_dir and assemblies_dir are screened for `.fastq.gz` and `.fasta` files respectively and sample name are automatically derived.
 
 ## Output
-A single tab-separated file `serovars.tsv`.
+Serovar detector uses [KMerAligner (KMA)](https://bitbucket.org/genomicepidemiology/kma) to map raw reads against the capsule gene database of Serovar detector, and it uses [Blastn](https://blast.ncbi.nlm.nih.gov/doc/blast-help/) to map the capsule gene database against the assembled genomes. Please note that it is possible to include both raww reads and assemblies of the same sample, this would lead to both mapping results being reported separately.
+
+A summary of detected capsule genes and their derived serovars are provided for each individual _sample_ and _mapper_, in a single tab-separated file: `/path/to/output/serovars.tsv`.
 
 ## Options
 ```
-usage: serovar_detector.py [-h] [-r --reads_dir] [-a --assembly_dir] -D
-                           --database -o --outdir [-T --theshold] [-R] [-b]
-                           [-B] [-k] [-t --threads] [-F] [-n] [-d]
+usage: serovar_detector [-h] [-r --reads_dir] [-a --assembly_dir] [-D --database] -o --outdir [-T --theshold] [-t --threads] [-k] [-F] [-c] [-n] [-d]
 
-Screen read files and assemblies for Serovar biomarker genes, in order to
-preovide suggestions for isolate serovar. Currently only supporting
-Actinobacillus Pleuropneumoniae.
-```
+Screen read files and assemblies for Serovar biomarker genes, in order to preovide suggestions for isolate serovar. Currently only supporting Actinobacillus Pleuropneumoniae.
 
-An overview of the available options:
-```
+options:
   -h, --help         show this help message and exit
   -r --reads_dir     Input path to reads directory
   -a --assembly_dir  Input path to assembly directory
-  -D --database      Path and prefix to kmer-aligner database
+  -D --database      Path and prefix to kmer-aligner database. (Default: /home/cucumbergebt/micromamba/envs/serovar_detector/lib/python3.14/site-
+                     packages/serovar_detector/db/Actinobacillus_pleuropneumoniae)
   -o --outdir        Output path to Results and Temporary files directory
-  -T --theshold      Cutoff threshold of match coverage and identity. Ignore
-                     threshold by setting to 0 or False. (Default 98)
-  -R                 Append to existing results file. (Default False)
-  -b                 Update existing blacklist file with new samples. Creates
-                     a blacklist file if non exists. (Default False)
-  -B                 Ignore and overwrite existing blacklist file. Creates a
-                     blacklist if non exists. (Default False)
-  -k                 Preserve temporary files such as KMA result files.
-                     (Default False)
-  -t --threads       Number of threads to allocate for the pipeline. (Default
-                     3)
-  -F                 Force rerun of all tasks in pipeline. (Default False)
-  -n                 Perform a dry run with Snakemake to see jobs but without
-                     executing them. (Default False)
-  -d                 Enable debug mode, stores snakemake object for inspection
-                     in R. (Default False)
+  -T --theshold      Cutoff threshold of match coverage and identity. Ignore threshold by setting to 0 or False. (Default: 98)
+  -t --threads       Number of threads to allocate for the pipeline. (Default: 3)
+  -k                 Preserve temporary files such as KMA result files. (Default: False)
+  -F                 Force rerun of all tasks in pipeline. (Default: False)
+  -c                 Don't let snakemake handle conda execution in rules. Enable this option if the pipeline should run in the current loaded environment. (Default: False)
+  -n                 Perform a dry run with Snakemake to see jobs but without executing them. (Default: False)
+  -d                 Enable debug mode, prints more messages and stores snakemake object for inspection in R. (Default: False)
 ```
+
+# Issues or questions
+If you encounter any issues or have any questions, you are more than welcome to post these in the issues section of this repository (Requires a GitHub account).
 
 # Citation
 If you are using our tool in your analysis, please consider to cite us.
