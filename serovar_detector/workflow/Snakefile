@@ -1,0 +1,44 @@
+from importlib import resources
+import sys
+import os
+import pandas
+import numpy
+
+PKG_DIR = resources.files("serovar_detector")
+
+database = config["database"]
+outdir = config["outdir"]
+threshold = config["threshold"]
+tmpdir = config["tmpdir"]
+debug = config["debug"]
+pepfile: f"{outdir}/schemas/project_config.yaml"
+serovar_profiles = f"{PKG_DIR}/config/serovar_profiles.yaml"
+
+print(pep)
+
+subsample_table = pep.subsample_table
+
+sample_grouped = subsample_table.groupby("type")
+
+reads_sheet = pandas.DataFrame({"sample_name": []})
+if "Reads" in subsample_table["type"].values:
+  reads_sheet = sample_grouped.get_group("Reads")
+  reads_samples = set(reads_sheet["sample_name"])
+
+assembly_sheet = pandas.DataFrame({"sample_name": []})
+if "Assembly" in subsample_table["type"].values:
+  assembly_sheet = sample_grouped.get_group("Assembly")
+  assembly_samples = set(assembly_sheet["sample_name"])
+
+print(reads_samples)
+
+blast_database = database + ".fasta"
+
+rule all:
+  input:
+    serovar = "%s/serovars.tsv" %outdir
+
+
+include: "rules/detect_serovars.smk"
+include: "rules/summarise_serovars.smk"
+
