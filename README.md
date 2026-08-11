@@ -37,7 +37,7 @@ IF you don't wish to involve conda at all, due to e.g. server restrictions or ho
 
 # Usage
 ```
-serovar_detector -r /path/to/input/reads -a /path/to/input/assemblies -o /path/to/output -t 4
+serovar_detector -r /path/to/input/reads -a /path/to/input/assemblies -o /path/to/output -t 3
 ```
 ## Input
 Serovar detector assumes use of either Illumina Paired end sequencing data or preassembled genomes. The top level of the `reads_dir/` and `assemblies_dir/` folders are screened for `.fastq.gz` and `.fasta` files respectively and sample name are derived automatically by ignoring the file extensions (and read mates).

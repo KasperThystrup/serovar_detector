@@ -24,6 +24,9 @@ maintainers = [
 [project.scripts]
 serovar_detector = "serovar_detector.cli:main"
 
+[project.urls]
+Repository = "https://github.com/KasperThystrup/serovar_detector"
+
 [tool.hatch.build.targets.wheel]
 packages = ["serovar_detector"]
 
