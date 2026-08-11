@@ -72,6 +72,7 @@ jobs:
     permissions:
       id-token: write
 
+    steps:
     - name: Download all the dists
       uses: actions/download-artifact@v6
       with:
