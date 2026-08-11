@@ -90,7 +90,7 @@ apply_thresholds <- function(res_table, threshold){
   empty_table <- nrow(res_table) == 0
   
   if (empty_table)
-    return(NULL)
+    return(res_table)
   
   dplyr::mutate(
     res_table,
@@ -258,15 +258,21 @@ summarize_serovars <- function(blast_results, kma_results, serovar_config_yaml, 
   
   filtered <- apply_thresholds(all_results, threshold)
   
-  logger::log_info("Generating serovar profiles from profile-config file.")
-  serovar_profiles <- generate_serovar_profiles(serovar_config_yaml)
-  
-  logger::log_info("Determining the most frequently repressented serovars and serovar genes.")
-  results <- resolve_serovars(filtered, serovar_profiles)
-  
-  logger::log_info("Writing results to: ", serovar_file)
-  readr::write_tsv(x = dplyr::arrange(results, Sample), file = serovar_file)
-  message("Success!")
+  if (nrow(filtered) < 1){
+    message("Serovar results file(s) are empty!")
+    readr::write_file(x = "No serovars", file = serovar_file)
+
+  } else {
+    
+    logger::log_info("Generating serovar profiles from profile-config file.")
+    serovar_profiles <- generate_serovar_profiles(serovar_config_yaml)
+    
+    logger::log_info("Determining the most frequently repressented serovars and serovar genes.")
+    results <- resolve_serovars(filtered, serovar_profiles)
+    
+    logger::log_info("Writing results to: ", serovar_file)
+    readr::write_tsv(x = dplyr::arrange(results, Sample), file = serovar_file)
+  }  
 }
 
 blast_results <- snakemake@input$blast_results
