@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
 
     environment:
-      name: testpypi
+      name: test_pypi
       url: https://test.pypi.org/p/serovar-detector
 
     permissions:
