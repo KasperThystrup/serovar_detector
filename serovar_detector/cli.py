@@ -41,56 +41,71 @@ def generate_configfile(database, outdir, threshold, threads, debug, tmpdir):
   return config_file
 
 
-def screen_files(directory, type):
+def create_file_table(pattern, file_list, type):
+  # Search file names for metadata
+  search = [re.search(pattern, file_name) for file_name in file_list]
+
+  # Generate DataFrame from search object groups
+  metadata_raw = pandas.DataFrame({
+    "sample_name": [search.group("sample_name") for search in search],
+    "file": [search.group("file") for search in search],
+    "type": type
+  })
+
+
   if type == "Reads":
+    metadata_raw["mate"] = [search.group("mate") for search in search]
+    metadata = metadata_raw.sort_values(by = ["sample_name", "mate"])
+  else:
+    metadata = metadata_raw.sort_values(by = "sample_name")
+
+  # Sort table
+  
+
+  return metadata
+
+
+
+
+def screen_files(path, type, single):
+  read_pattern = r"^(?P<file>\S+\/(?P<sample_name>\S+?)((_S\d+)(_L\d+))?_(?P<mate>[Rr]?[12])(_\d{3})?\.(?P<ext>((fastq)?(fq)?)?(\.gz)?))"
+  assembly_pattern = r"^(?P<file>\S+\/(?P<sample_name>\S+)\.(?P<ext>[fast]+))"
+
+  if type == "Reads" and not single:
     # Screen for files
-    fastqs = [sample_read for sample_read in glob.glob(f"{directory}/*.fastq*")]
-    fqs = [sample_read for sample_read in glob.glob(f"{directory}/*.fq*")]
+    fastqs = [sample_read for sample_read in glob.glob(f"{path}/*.fastq*")]
+    fqs = [sample_read for sample_read in glob.glob(f"{path}/*.fq*")]
 
     # Combine file lists
     read_files = fastqs + fqs
 
-    # Search file names for metadata
-    pattern = r"^(?P<file>\S+\/(?P<sample_name>\S+?)((_S\d+)(_L\d+))?_(?P<mate>[Rr]?[12])(_\d{3})?\.(?P<ext>((fastq)?(fq)?)?(\.gz)?))"
-    search = [re.search(pattern, read_file) for read_file in read_files]
+    # Create metadata from read_dir
+    metadata = create_file_table(pattern = read_pattern, file_list = read_files, type = type)
 
-    # Generate DataFrame from search object groups
-    metadata_raw = pandas.DataFrame({
-      "sample_name": [search.group("sample_name") for search in search],
-      "mate": [search.group("mate") for search in search],
-      "file": [search.group("file") for search in search],
-      "type": type
-    })
+  elif type == "Reads" and path: 
+    # Create metadata from single read pair
+    metadata = create_file_table(pattern = read_pattern, file_list = path, type = type)
 
-    # Sort table
-    metadata = metadata_raw.sort_values(by = ["sample_name", "mate"])
-
-  elif type == "Assembly":
+  elif type == "Assembly" and not single:
     # Screen for files
-    fastas = [sample_assembly for sample_assembly in glob.glob(f"{directory}/*.fasta")]
-    fas = [sample_assembly for sample_assembly in glob.glob(f"{directory}/*.fa")]
+    fastas = [sample_assembly for sample_assembly in glob.glob(f"{path}/*.fasta")]
+    fas = [sample_assembly for sample_assembly in glob.glob(f"{path}/*.fa")]
 
     # Combine file lists
     assembly_files = fastas + fas
 
-    # Search file names for metadata
-    pattern = r"^(?P<file>\S+\/(?P<sample_name>\S+)\.(?P<ext>[fast]+))"
-    search = [re.search(pattern, assembly_file) for assembly_file in assembly_files]
+    # Create metadata from assembly_dir
+    metadata = create_file_table(pattern = assembly_pattern, file_list = assembly_files, type = type)
 
-    # Generate DataFrame from search object groups
-    metadata_raw = pandas.DataFrame({
-      "sample_name": [search.group("sample_name") for search in search],
-      "file": [search.group("file") for search in search],
-      "type": type
-    })
-
-    # Sort table
-    metadata = metadata_raw.sort_values(by = "sample_name")
+  elif type == "Assembly" and path:
+    # Create metadata from single assembly
+    metadata = create_file_table(pattern = assembly_pattern, file_list = path, type = type)
 
   else:
-    return pandas.DataFrame({"sample_name", "mate", "file", "type"})
+    # Create empty metadata
+    metadata = pandas.DataFrame(columns = ["sample_name", "mate", "file", "type"])
 
-  return metadata #file_metadata
+  return metadata
 
 
 def create_symlinks(metadata, outdir):
@@ -193,14 +208,25 @@ def write_PEP(pepdir):
     print(f"Success: Overwriting {pep_file}")
 
 
-def generate_sheets(reads_dir, assembly_dir, outdir, tmpdir):
+def generate_sheets(r1, r2, reads_dir, assembly, assembly_dir, outdir, tmpdir):
   # Generating dirs
   os.makedirs(outdir, exist_ok=True)
   os.makedirs(tmpdir, exist_ok=True)
 
-  # Screening input files
-  reads_metadata = screen_files(directory = reads_dir, type = "Reads")
-  assembly_metadata = screen_files(directory = assembly_dir, type = "Assembly")
+  # Determining single vs batch
+  reads_single_sample = r1 and r2
+
+  if reads_single_sample:
+    reads_metadata = screen_files(path = [r1, r2], type = "Reads", single = True)
+  else:
+    reads_metadata = screen_files(path = reads_dir, type = "Reads", single = False)
+  
+  if assembly:
+    assembly = [assembly]
+    assembly_metadata = screen_files(path = assembly, type = "Assembly", single = True)
+  else:
+    assembly_metadata = screen_files(path = assembly_dir, type = "Assembly", single = False)
+
 
   metadata = pandas.concat([reads_metadata, assembly_metadata], ignore_index = True, sort = True)
 
@@ -217,6 +243,7 @@ def generate_sheets(reads_dir, assembly_dir, outdir, tmpdir):
 
     if not pepdir_exists:
       os.makedirs(pepdir, exist_ok = True)
+
 
     sample_sheet = make_sample_sheet(metadata)
     sample_sheet_updated = write_sample_sheet(sample_sheet, pepdir)
@@ -236,6 +263,9 @@ def generate_sheets(reads_dir, assembly_dir, outdir, tmpdir):
 
 def parse_arguments():
   parser = argparse.ArgumentParser(description = "Screen read files and assemblies for Serovar biomarker genes, in order to preovide suggestions for isolate serovar. Currently only supporting Actinobacillus Pleuropneumoniae.")
+  parser.add_argument("-1", metavar = "--r1", dest = "r1", help = "Path to sample read mate 1 (Disables --reads_dir)", required = False, default = None)
+  parser.add_argument("-2", metavar = "--r2", dest = "r2", help = "Path to sample read mate 2 (Disables --reads_dir)", required = False, default = None)
+  parser.add_argument("-A", metavar = "--assembly", dest = "assembly", help = "Path to sample assembly (Disables --assembly_dir)", required = False, default = None)
   parser.add_argument("-r", metavar = "--reads_dir", dest = "reads_dir", help = "Input path to reads directory", required = False)
   parser.add_argument("-a", metavar = "--assembly_dir", dest = "assembly_dir", help = "Input path to assembly directory", required = False)
   parser.add_argument("-D", metavar = "--database", dest = "database", help = "Path and prefix to kmer-aligner database. (Default: %(default)s)", default = f"{PKG_DIR}/db/Actinobacillus_pleuropneumoniae")
@@ -269,20 +299,31 @@ def main():
 
 
   # Polish input
-  if not args.reads_dir:
-    reads_dir = args.reads_dir
-  else:
-    reads_dir = os.path.abspath(args.reads_dir)
-  if not args.assembly_dir:
-    assembly_dir = args.assembly_dir
-  else:
-    assembly_dir = os.path.abspath(args.assembly_dir)
+  r1 = None
+  r2 = None
+  reads_dir = None
+  if args.r1:
+    r1 = os.path.abspath(args.r1)
+    r2 = os.path.abspath(args.r2)
+  elif args.reads_dir:
+      reads_dir = os.path.abspath(args.reads_dir)
+
+  assembly = None
+  assembly_dir = None
+
+  if args.assembly:
+    assembly = os.path.abspath(args.assembly)
+  elif args.assembly_dir:
+      assembly_dir = os.path.abspath(args.assembly_dir)
+
+  if not (r1 or r2 or reads_dir or assembly or assembly_dir):
+    raise ValueError("No input files or directories provided for reads or assemblies.")
 
   # Prepare config file for snakemake
   config_file = generate_configfile(database = database, outdir = outdir, threshold = threshold, threads = threads, debug = debug, tmpdir = tmpdir)
 
   # Generate subsample sheet
-  sample_files = generate_sheets(reads_dir = reads_dir, assembly_dir = assembly_dir, outdir = outdir, tmpdir = tmpdir)
+  sample_files = generate_sheets(r1 = r1, r2 = r2, reads_dir = reads_dir, assembly = assembly, assembly_dir = assembly_dir, outdir = outdir, tmpdir = tmpdir)
 
 
   if len(sample_files) == 0:
