@@ -5,7 +5,7 @@ on:
     types: [closed]
 
 permissions:
-  conents: write
+  contents: write
 
 jobs:
   bump_version:
