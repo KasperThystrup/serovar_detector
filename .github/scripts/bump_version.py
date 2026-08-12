@@ -10,7 +10,7 @@ text = version_file.read_text()
 
 m = re.search(r'__version__ = "(\d+)\.(\d+)\.(\d+)"', text)
 
-major, minor, patch, build = map(int, m.groups())
+major, minor, patch = map(int, m.groups())
 
 if label == "major":
     major += 1
