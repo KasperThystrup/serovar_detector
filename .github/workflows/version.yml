@@ -38,11 +38,12 @@ jobs:
 
       - name: Commit
         with:
+          uses: actions/checkout@v4
           token: ${{ secrets.VERSION }}
-        run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
+          run: |
+            git config user.name github-actions
+            git config user.email github-actions@github.com
 
-          git add serovar_detector/__version__.py
-          git commit -m "Bump version"
+            git add serovar_detector/__version__.py
+            git commit -m "Bump version"
           git push
