@@ -72,8 +72,8 @@ A summary of detected capsule genes and their derived serovars are provided for 
 ## Options
 ```
 serovar_detector -h
-usage: serovar_detector [-h] [-1 --r1] [-2 --r2] [-A --assembly]
-                        [-r --reads_dir] [-a --assembly_dir] -o --outdir
+usage: serovar_detector [-h] [-r --reads_dir] [-1 --r1] [-2 --r2]
+                        [-a --assembly_dir] [-A --assembly] -o --outdir
                         [-T --theshold] [-t --threads] [-k] [-F] [-c] [-n]
                         [-D --database] [-d]
 
@@ -83,11 +83,11 @@ Actinobacillus Pleuropneumoniae.
 
 options:
   -h, --help         show this help message and exit
+  -r --reads_dir     Input path to reads directory
   -1 --r1            Path to sample read mate 1 (Disables --reads_dir)
   -2 --r2            Path to sample read mate 2 (Disables --reads_dir)
-  -A --assembly      Path to sample assembly (Disables --assembly_dir)
-  -r --reads_dir     Input path to reads directory
   -a --assembly_dir  Input path to assembly directory
+  -A --assembly      Path to sample assembly (Disables --assembly_dir)
   -o --outdir        Output path to Results and Temporary files directory
   -T --theshold      Cutoff threshold of match coverage and identity. Ignore
                      threshold by setting to 0 or False. (Default: 98)
