@@ -1,15 +1,13 @@
 name: Validate PR Labels
 
 on:
+  issue_comment:
+    types: [created]
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
-  workflow_run:
-    workflows: ["Label PR by Comment"]
-    types: [completed]
 
 jobs:
   check-version-label:
-    # If triggered by a comment, only run if that comment is on a PR
     if: ${{ github.event_name == 'pull_request' || github.event.issue.pull_request }}
     runs-on: ubuntu-latest
     env:
