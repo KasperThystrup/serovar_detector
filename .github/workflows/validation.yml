@@ -136,7 +136,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Cool down for API sync
-        run: sleep 15
+        run: sleep 20
 
       - name: Validate Single Version Label
         run: |
