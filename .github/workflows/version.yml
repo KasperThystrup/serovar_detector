@@ -9,7 +9,10 @@ permissions:
 
 jobs:
   bump_version:
-    if: github.event.pull_request.merged == true
+    if: |
+      github.event.pull_request.merged == true && 
+      !contains(github.event.pull_request.labels.*.name, 'build')
+
     runs-on: ubuntu-latest
 
     steps:
