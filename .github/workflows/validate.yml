@@ -34,7 +34,7 @@ jobs:
           FOUND_LABELS=()
           
           for label in $CURRENT_LABELS; do
-            if [[ "$label" == "major" || "$label" == "minor" || "$label" == "patch" ]]; then
+            if [[ "$label" == "major" || "$label" == "minor" || "$label" == "patch"  || "$label" == "build" ]]; then
               MATCH_COUNT=$((MATCH_COUNT + 1))
               FOUND_LABELS+=("$label")
             fi
@@ -47,7 +47,7 @@ jobs:
             echo "Success: Exactly one versioning label is applied (${FOUND_LABELS})."
             exit 0
           elif [ "$MATCH_COUNT" -eq 0 ]; then
-            echo "Error: Pull Request is missing a version label (major, minor, or patch)."
+            echo "Error: Pull Request is missing a version label (major, minor, patch, or build)."
             exit 1
           else
             echo "Error: Pull Request has multiple version labels (${FOUND_LABELS[*]}). Only one is allowed."
