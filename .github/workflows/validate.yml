@@ -15,6 +15,9 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Cool down for API sync
+        run: sleep 15
+
       - name: Validate Single Version Label
         run: |
           # Dynamically determine PR number depending on what event triggered the run
