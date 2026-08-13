@@ -23,6 +23,9 @@ jobs:
           elif [[ "$COMMENT_BODY" == *"/patch"* ]]; then
             echo "Attaching new label 'patch'"
             echo "new_label=patch" >> $GITHUB_OUTPUT
+          elif [[ "$COMMENT_BODY" == *"/build"* ]]; then
+            echo "Attaching new label 'build'"
+            echo "new_label=build" >> $GITHUB_OUTPUT
           else
             echo "Comment is not related to version labelling"
             exit 0
@@ -47,18 +50,16 @@ jobs:
             echo "authorized=false" >> $GITHUB_OUTPUT
           fi
       - name: Update Labels
-        # FIXED: Changed double quotes to single quotes, and output to outputs
         if: steps.authorize.outputs.authorized == 'true' && steps.parse.outputs.new_label != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.issue.number }}
-          # FIXED: Changed step.parse.output to steps.parse.outputs
           NEW_LABEL: ${{ steps.parse.outputs.new_label }}
         run: |
           CURRENT_LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name')
           # Define conflicting versioning labels
-          VERSION_LABELS=("major" "minor" "patch")
+          VERSION_LABELS=("major" "minor" "patch" "build")
           # Loop through current labels and remove any conflicting version labels
           for label in $CURRENT_LABELS; do
             if [[ " ${VERSION_LABELS[@]} " =~ " ${label} " ]]; then
