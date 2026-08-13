@@ -71,7 +71,7 @@ jobs:
           gh pr edit "$PR_NUMBER" --add-label "$NEW_LABEL"
 
   check-version-label:
-    needs: add
+    needs: version_labelling
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
