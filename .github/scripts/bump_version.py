@@ -35,4 +35,7 @@ text = re.sub(
 
 version_file.write_text(text)
 
-print(new_version)
+# Write new version to Github actions
+if "GITHUB_OUTPUT" in os.environ:
+    with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+        f.write(f"new_version={new_version}\n")
