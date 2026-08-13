@@ -3,24 +3,32 @@ name: Validate PR Labels
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
+  issue_comment:
+    types: [created]
 
 jobs:
   check-version-label:
+    # If triggered by a comment, only run if that comment is on a PR
+    if: ${{ github.event_name == 'pull_request' || github.event.issue.pull_request }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Validate Single Version Label
         run: |
-          PR_NUM="${{ github.event.pull_request.number }}"
-          REPO="${{ github.repository }}"
+          # Dynamically determine PR number depending on what event triggered the run
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            PR_NUM="${{ github.event.pull_request.number }}"
+          else
+            PR_NUM="${{ github.event.issue.number }}"
+          fi
           
+          REPO="${{ github.repository }}"
           echo "Checking labels for PR #$PR_NUM in $REPO..."
           
-          # Fetch all current labels on the PR as a line-separated list
+          # Fetch current labels
           CURRENT_LABELS=$(gh pr view "$PR_NUM" -R "$REPO" --json labels --jq '.labels[].name')
           
-          # Count how many of the required version labels are currently applied
           MATCH_COUNT=0
           FOUND_LABELS=()
           
@@ -34,9 +42,8 @@ jobs:
           echo "Found version labels: ${FOUND_LABELS[*]}"
           echo "Total count: $MATCH_COUNT"
           
-          # Enforce the "exactly one" ruleset
           if [ "$MATCH_COUNT" -eq 1 ]; then
-            echo "Success: Exactly one versioning label is applied (${FOUND_LABELS[0]})."
+            echo "Success: Exactly one versioning label is applied (${FOUND_LABELS})."
             exit 0
           elif [ "$MATCH_COUNT" -eq 0 ]; then
             echo "Error: Pull Request is missing a version label (major, minor, or patch)."
