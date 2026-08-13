@@ -9,6 +9,7 @@ jobs:
     if: ${{ github.event.issue.pull_request }}
     runs-on: ubuntu-latest
     permissions:
+      issues: write
       pull-requests: write
 
     steps:
@@ -16,18 +17,16 @@ jobs:
         id: parse
         run: |
           COMMENT_BODY="${{ github.event.comment.body }}"
-
           if [[ "$COMMENT_BODY" == *"/minor"* ]]; then
             echo "Attaching new label 'minor'"
             echo "new_label=minor" >> $GITHUB_OUTPUT
           elif [[ "$COMMENT_BODY" == *"/patch"* ]]; then
             echo "Attaching new label 'patch'"
             echo "new_label=patch" >> $GITHUB_OUTPUT
-          else:
-            echo "Comment is not rellated to version labelling"
+          else
+            echo "Comment is not related to version labelling"
             exit 0
           fi
-
       - name: Authorize User
         id: authorize
         run: | 
@@ -47,20 +46,19 @@ jobs:
             echo "User not authorized to update version labels."
             echo "authorized=false" >> $GITHUB_OUTPUT
           fi
-
       - name: Update Labels
-        if: steps.authorize.output.authorized == "true" && steps.parse.outputs.new_label != ""
+        # FIXED: Changed double quotes to single quotes, and output to outputs
+        if: steps.authorize.outputs.authorized == 'true' && steps.parse.outputs.new_label != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.issue.number }}
-          NEW_LABEL: ${{ steps.parse.output.new_label }}
+          # FIXED: Changed step.parse.output to steps.parse.outputs
+          NEW_LABEL: ${{ steps.parse.outputs.new_label }}
         run: |
           CURRENT_LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name')
-
           # Define conflicting versioning labels
           VERSION_LABELS=("major" "minor" "patch")
-
           # Loop through current labels and remove any conflicting version labels
           for label in $CURRENT_LABELS; do
             if [[ " ${VERSION_LABELS[@]} " =~ " ${label} " ]]; then
@@ -68,7 +66,6 @@ jobs:
               gh pr edit "$PR_NUMBER" --remove-label "$label"
             fi
           done
-
           # Apply the requested new label
           echo "Adding new label: $NEW_LABEL"
           gh pr edit "$PR_NUMBER" --add-label "$NEW_LABEL"
