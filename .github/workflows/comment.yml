@@ -3,6 +3,8 @@ name: Label PR by Comment
 on:
   issue_comment:
     types: [created]
+    branches:
+      - dev
 
 jobs:
   small_version_labelling:
