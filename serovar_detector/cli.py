@@ -1,5 +1,6 @@
 #!/bin/python
 
+from .__version__ import __version__
 from importlib import resources
 import argparse
 import os
@@ -277,6 +278,7 @@ def parse_arguments():
   parser.add_argument("-n", dest = "dry_run", help = "Perform a dry run with Snakemake to see jobs but without executing them. (Default: %(default)s)", action = "store_true")
   parser.add_argument("-D", metavar = "--database", dest = "database", help = "Path and prefix to kmer-aligner database. (Default: %(default)s)", default = f"{PKG_DIR}/db/Actinobacillus_pleuropneumoniae")
   parser.add_argument("-d", dest = "debug", help = "Enable debug mode, prints more messages and stores snakemake object for inspection in R. (Default: %(default)s)", action = "store_true")
+  parser.add_argument(["-v", "--version",], action="version", version=f"serovar_detector {__version__}")
 
   return(parser.parse_args())
 
