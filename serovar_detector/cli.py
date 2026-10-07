@@ -357,3 +357,4 @@ def main():
     print("All Done!")
   else:
     print("Something went wrong while executing snakemake.")
+    sys.exit(1)
