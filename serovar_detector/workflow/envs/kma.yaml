@@ -2,4 +2,4 @@ name: kma
 channels:
   - conda-forge
 dependencies:
- - bioconda::kma
+ - bioconda::kma==1.6.18

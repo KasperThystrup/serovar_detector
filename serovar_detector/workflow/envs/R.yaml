@@ -1,5 +1,7 @@
 name: R
+channels:
+  - conda-forge
 dependencies:
- - conda-forge::r-essentials
- - conda-forge::r-logger
- - conda-forge::r-yaml
+ - conda-forge::r-essentials==4.5
+ - conda-forge::r-logger==0.4.3
+ - conda-forge::r-yaml==2.3.12
