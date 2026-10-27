@@ -1,5 +1,0 @@
-name: blast
-channels:
-  - conda-forge
-dependencies:
- - bioconda::blast

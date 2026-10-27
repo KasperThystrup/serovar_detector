@@ -5,7 +5,7 @@ rule detect_assembly_capsules:
   output:
     tsv = f"{tmpdir}/blast/{{sample}}.tsv"
   conda:
-    "../envs/blast.yaml"
+    "../envs/serovar_dependencies.yaml"
   threads:
     1
   message:
@@ -40,7 +40,7 @@ rule detect_reads_capsules:
   output:
     res = f"{tmpdir}/kma/{{sample}}.res"
   conda:
-    "../envs/kma.yaml"
+    "../envs/serovar_dependencies.yaml"
   threads:
     1
   message:
