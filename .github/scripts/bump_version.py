@@ -25,16 +25,12 @@ elif label == "feature":
 elif label == "patch":
     patch += 1
 
-
 new_version = f'{major}.{minor}.{patch}'
 
-text = re.sub(
-    r'__version__ = ".*"',
-    f'__version__ = "{new_version}"',
-    text,
-)
 
-version_file.write_text(text)
+version_text = f'__version__ = "{new_version}"'
+
+version_file.write_text(version_text)
 
 # Write new version to Github actions
 if "GITHUB_OUTPUT" in os.environ:
