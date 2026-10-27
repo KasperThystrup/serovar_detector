@@ -69,6 +69,9 @@ Serovar detector uses [KMerAligner (KMA)](https://bitbucket.org/genomicepidemiol
 
 A summary of detected capsule genes and their derived serovars are provided for each individual _sample_ and _mapper_, in a single tab-separated file: `/path/to/output/serovars.tsv`.
 
+# Own database of CPS genes?
+No problemo! use the `-D` argument to point on you own custom database file (expected in fasta format), then the database will be integrated in your system installation folder and automatically be indexed using KMA.
+
 ## Options
 ```
 serovar_detector -h
