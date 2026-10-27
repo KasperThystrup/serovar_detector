@@ -1,12 +1,11 @@
 rule detect_assembly_capsules:
   input:
-    assembly = "%s/assemblies/{sample}.fasta" %tmpdir
-  params:
-    db = blast_database
+    database = rules.copy_database.output.fasta,
+    assembly = f"{tmpdir}/assemblies/{{sample}}.fasta"
   output:
-    tsv = "%s/blast/{sample}.tsv" %tmpdir
+    tsv = f"{tmpdir}/blast/{{sample}}.tsv"
   conda:
-    "../envs/blast.yaml"
+    "../envs/serovar_dependencies.yaml"
   threads:
     1
   message:
@@ -16,7 +15,7 @@ rule detect_assembly_capsules:
 
     printf 'Template\tAlignment_count\tAlignment_length\tTemplate_length\n' > {output.tsv}
 
-    blastn -subject {params.db} -query {input.assembly} -outfmt '6 sseqid nident length slen' >> {output.tsv}
+    blastn -subject {input.database} -query {input.assembly} -outfmt '6 sseqid nident length slen' >> {output.tsv}
     """
   shell:
     """
@@ -31,26 +30,25 @@ rule detect_assembly_capsules:
 
 rule detect_reads_capsules:
   input:
-    mate1 = "%s/reads/{sample}_R1.fastq.gz" %tmpdir,
-    mate2 = "%s/reads/{sample}_R2.fastq.gz" %tmpdir
+    database = rules.generate_kma_index.output.name,
+    mate1 = f"{tmpdir}/reads/{{sample}}_R1.fastq.gz",
+    mate2 = f"{tmpdir}/reads/{{sample}}_R2.fastq.gz"
   params:
-    db = database,
-    prefix = "%s/kma/{sample}" %tmpdir,
-    kma_dir = "%s/kma" %tmpdir
+    db_prefix = rules.generate_kma_index.params.prefix,
+    kma_dir = f"{tmpdir}/kma",
+    res_prefix = f"{tmpdir}/kma/{{sample}}"
   output:
-    res = "%s/kma/{sample}.res" %tmpdir
+    res = f"{tmpdir}/kma/{{sample}}.res"
   conda:
-    "../envs/kma.yaml"
+    "../envs/serovar_dependencies.yaml"
   threads:
     1
   message:
     """
-    mkdir -p {params.kma_dir}
-    kma -ipe {input.mate1} {input.mate2} -o {params.prefix} -t_db {params.db} -t {threads}
+    kma -ipe {input.mate1} {input.mate2} -o {params.res_prefix} -t_db {params.db_prefix} -t {threads}
     """
   shell:
     """
-    mkdir -p {params.kma_dir}
-    kma -ipe {input.mate1} {input.mate2} -o {params.prefix} -t_db {params.db} -t {threads}
+    kma -ipe {input.mate1} {input.mate2} -o {params.res_prefix} -t_db {params.db_prefix} -t {threads}
     """
 

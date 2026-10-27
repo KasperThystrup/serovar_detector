@@ -7,9 +7,9 @@ rule summarize_serovars:
 		serovar_profiles = serovar_profiles,
 		debug = debug
 	output:
-		serovar_file = "%s/serovars.tsv" %outdir
+		serovar_file = f"{outdir}/serovars.tsv"
 	conda:
-		"../envs/R.yaml"
+		"../envs/serovar_dependencies.yaml"
 	script:
 		"../scripts/summarize_serovars.R"
 

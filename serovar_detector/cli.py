@@ -1,9 +1,9 @@
 #!/bin/python
 
-from .__version__ import __version__
 from importlib import resources
+from pathlib import Path
 import argparse
-import os
+from .__version__ import __version__
 import sys
 import yaml
 import glob
@@ -17,34 +17,40 @@ import shutil
 PKG_DIR = resources.files("serovar_detector")
 
 def generate_configfile(database, outdir, threshold, threads, debug, tmpdir):
+  print("Generating config file", end = "...")
   # Define config file
-  config_file = f"{outdir}/config.yaml"
+  config_file = outdir / "config.yaml"
 
   # Check for existing config file
-  if not os.path.isfile(config_file):
-    config_dir = os.path.dirname(config_file)
+  if not config_file.is_file():
+    config_dir = config_file.parent
 
     # Check for existing config dir
-    if not os.path.isdir(config_dir):
+    if not config_dir.is_dir():
       print("No config dir detected, creating directory.")
-      os.makedirs(config_dir)
+      config_dir.mkdir(parents = True)
 
-  out_path = os.path.abspath(outdir).rstrip("/")
+  out_path = outdir.absolute()
 
   config = {
-    "database": database, "outdir": out_path, "threshold": threshold,
-    "tmpdir": tmpdir, "debug": debug, "threads": threads
+    "database": str(database), "outdir": str(out_path), "threshold": threshold,
+    "tmpdir": str(tmpdir), "debug": debug, "threads": threads
   }
 
   with open(config_file, "w") as config_yaml:
     yaml.dump(config, config_yaml)
+
+  if config_file.exists():
+    print(f"Success: Overwritting {config_file}")
+  else:
+    print(f"Success: Written to {config_file}")
 
   return config_file
 
 
 def create_file_table(pattern, file_list, type):
   # Search file names for metadata
-  search = [re.search(pattern, file_name) for file_name in file_list]
+  search = [re.search(pattern, str(file_name)) for file_name in file_list]
 
   # Generate DataFrame from search object groups
   metadata_raw = pandas.DataFrame({
@@ -109,40 +115,47 @@ def screen_files(path, type, single):
   return metadata
 
 
-def create_symlinks(metadata, outdir):
-  # Iterating voer each row
+def create_symlinks(metadata, tmpdir):
+  print(f"Linking sample files", end = "... ")
+  # Iterating over each row
   for row in range(len(metadata.index)):
+
     # Extracting sample information
     sample_metadata = metadata.loc[row]
     sample_name = sample_metadata["sample_name"]
 
     # Generate link filenames
     if sample_metadata["type"] == "Reads":
-      # Ensuring outdir exists
-      os.makedirs(name = f"{outdir}/reads", exist_ok = True)
+      read_dir = tmpdir / "reads"
+      if not read_dir.is_dir():
+        # Ensuring reads directory  exists
+        read_dir.mkdir(parents = True)
 
       # Defining input and output
       mate = sample_metadata["mate"].replace("R", "")
-      sample_file = os.path.realpath(sample_metadata["file"])
-      sample_link = f"{outdir}/reads/{sample_name}_R{mate}.fastq.gz"
+      sample_file = Path(sample_metadata["file"]).resolve()
+      sample_link = tmpdir / f"reads/{sample_name}_R{mate}.fastq.gz"
 
-    else:
-      # Ensuring outdir exists
-      os.makedirs(name = f"{outdir}/assemblies", exist_ok = True)
+    elif sample_metadata["type"] == "Assembly":
+      ass_dir = tmpdir / "assembly"
+      
+      if not ass_dir.is_dir():
+        # Ensuring assemblies directory exists
+        ass_dir.mkdir(parents = True)
 
       # Defining input and output
-      sample_file = os.path.realpath(sample_metadata["file"])
-      sample_link = f"{outdir}/assemblies/{sample_name}.fasta"
+      sample_file = Path(sample_metadata["file"]).resolve()
+      sample_link = tmpdir / f"assemblies/{sample_name}.fasta"
 
     # Symlinking file
-    if not os.path.exists(sample_link):
+    if not sample_link.exists():
       try:
-        os.symlink(src = sample_file, dst = sample_link)
+        sample_link.symlink_to(sample_file)
       except FileExistsError:
-        os.unlink(sample_link)
-        os.symlink(src = sample_file, dst = sample_link)
+        sample_link.unlink(missing_ok = True)
+        sample_link.symlink_to(sample_file)
 
-  print("Files successfully linked!")
+  print(f"Sucess: Files successfully linked to {tmpdir}!")
   return True
 
 
@@ -163,25 +176,24 @@ def make_sample_sheet(table):
 
 
 def write_sample_sheet(sample_sheet, pepdir):
-  sample_file = f"{pepdir}/sample_sheet.csv"
-  sample_exists = os.path.exists(sample_file)
+  sample_file = pepdir / "sample_sheet.csv"
 
   print("Writting sample sheet", end = "... ")
   sample_sheet.to_csv(sample_file, index = False)
-  if sample_exists:
+
+  if sample_file.exists():
     print(f"Success: Overwritting {sample_file}")
   else:
     print(f"Success: Written to {sample_file}")
 
 
 def write_subsample_sheet(subsample_sheet, pepdir):
-  subsample_file = f"{pepdir}/subsample_sheet.csv"
-  subsample_exists = os.path.exists(subsample_file)
+  subsample_file = pepdir / "subsample_sheet.csv"
 
   print("Writting subsample sheet", end = "... ")
   subsample_sheet.to_csv(subsample_file, index = False)
 
-  if subsample_exists:
+  if subsample_file.exists():
     print(f"Success: Overwritting {subsample_file}")
   else:
     print(f"Success: Written to {subsample_file}")
@@ -189,8 +201,7 @@ def write_subsample_sheet(subsample_sheet, pepdir):
 
 def write_PEP(pepdir):
   # Define pep files
-  pep_file = f"{pepdir}/project_config.yaml"
-  pep_exists = os.path.exists(pep_file)
+  pep_file = pepdir / "project_config.yaml"
 
   # Generate PEP configuration:
   PEP_header = "pep_version: 2.1.0\n"
@@ -203,16 +214,19 @@ def write_PEP(pepdir):
     config_file.write(PEP_sample)
     config_file.write(PEP_subsample)
 
-  if not pep_exists:
-    print(f"Success: Written to {pep_file}")
-  elif pep_exists:
+  if pep_file.exists():
     print(f"Success: Overwriting {pep_file}")
+  else:
+    print(f"Success: Written to {pep_file}")
 
 
 def generate_sheets(r1, r2, reads_dir, assembly, assembly_dir, outdir, tmpdir):
-  # Generating dirs
-  os.makedirs(outdir, exist_ok=True)
-  os.makedirs(tmpdir, exist_ok=True)
+  
+  if not outdir.is_dir():
+    # Generating dirs
+    outdir.mkdir(parents = True)
+  if not tmpdir.is_dir():
+    tmpdir.mkdir(parents = True)
 
   # Determining single vs batch
   reads_single_sample = r1 and r2
@@ -239,11 +253,10 @@ def generate_sheets(r1, r2, reads_dir, assembly, assembly_dir, outdir, tmpdir):
     create_symlinks(metadata, tmpdir)
 
     # Ensure PEP folder exists
-    pepdir = f"{outdir}/schemas"
-    pepdir_exists = os.path.isdir(pepdir)
+    pepdir = Path(outdir / "schemas")
 
-    if not pepdir_exists:
-      os.makedirs(pepdir, exist_ok = True)
+    if not pepdir.is_dir():
+      pepdir.mkdir()
 
 
     sample_sheet = make_sample_sheet(metadata)
@@ -276,9 +289,9 @@ def parse_arguments():
   parser.add_argument("-F", dest = "force", help = "Force rerun of all tasks in pipeline. (Default: %(default)s)", action = "store_true")
   parser.add_argument("-c", dest = "noconda", help = "Don't let snakemake handle conda execution in rules. Enable this option if the pipeline should run in the current loaded environment. (Default: %(default)s)", action = "store_true")
   parser.add_argument("-n", dest = "dry_run", help = "Perform a dry run with Snakemake to see jobs but without executing them. (Default: %(default)s)", action = "store_true")
-  parser.add_argument("-D", metavar = "--database", dest = "database", help = "Path and prefix to kmer-aligner database. (Default: %(default)s)", default = f"{PKG_DIR}/db/Actinobacillus_pleuropneumoniae")
+  parser.add_argument("-D", metavar = "--database", dest = "database", help = "Path to database Fasta file. (Default: %(default)s)", default = f"{PKG_DIR}/db/Actinobacillus_pleuropneumoniae.fasta")
   parser.add_argument("-d", dest = "debug", help = "Enable debug mode, prints more messages and stores snakemake object for inspection in R. (Default: %(default)s)", action = "store_true")
-  parser.add_argument(["-v", "--version",], action="version", version=f"serovar_detector {__version__}")
+  parser.add_argument("-v", "--version", action="version", version=f"serovar_detector {__version__}")
 
   return(parser.parse_args())
 
@@ -288,8 +301,8 @@ def main():
   # Derrive arguments
   args = parse_arguments()
 
-  database = os.path.abspath(args.database)
-  outdir = os.path.abspath(args.outdir)
+  database = Path(args.database).absolute()
+  outdir = Path(args.outdir).absolute()
   threshold = args.threshold
   keep_tmp = args.keep_tmp
   threads = int(args.threads)
@@ -297,7 +310,7 @@ def main():
   noconda = args.noconda
   dry_run = args.dry_run
   debug = args.debug
-  tmpdir = f"{outdir}/tmp"
+  tmpdir = Path(outdir / "tmp")
 
 
   # Polish input
@@ -305,18 +318,18 @@ def main():
   r2 = None
   reads_dir = None
   if args.r1:
-    r1 = os.path.abspath(args.r1)
-    r2 = os.path.abspath(args.r2)
+    r1 = Path(args.r1).absolute()
+    r2 = Path(args.r2).absolute()
   elif args.reads_dir:
-      reads_dir = os.path.abspath(args.reads_dir)
+      reads_dir = Path(args.reads_dir).absolute()
 
   assembly = None
   assembly_dir = None
 
   if args.assembly:
-    assembly = os.path.abspath(args.assembly)
+    assembly = Path(args.assembly).absolute()
   elif args.assembly_dir:
-      assembly_dir = os.path.abspath(args.assembly_dir)
+      assembly_dir = Path(args.assembly_dir).absolute()
 
   if not (r1 or r2 or reads_dir or assembly or assembly_dir):
     raise ValueError("No input files or directories provided for reads or assemblies.")
