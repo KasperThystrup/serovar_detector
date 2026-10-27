@@ -134,10 +134,10 @@ def create_symlinks(metadata, tmpdir):
       # Defining input and output
       mate = sample_metadata["mate"].replace("R", "")
       sample_file = Path(sample_metadata["file"]).resolve()
-      sample_link = tmpdir / f"reads/{sample_name}_R{mate}.fastq.gz"
+      sample_link = read_dir / f"{sample_name}_R{mate}.fastq.gz"
 
     elif sample_metadata["type"] == "Assembly":
-      ass_dir = tmpdir / "assembly"
+      ass_dir = tmpdir / "assemblies"
       
       if not ass_dir.is_dir():
         # Ensuring assemblies directory exists
@@ -145,7 +145,7 @@ def create_symlinks(metadata, tmpdir):
 
       # Defining input and output
       sample_file = Path(sample_metadata["file"]).resolve()
-      sample_link = tmpdir / f"assemblies/{sample_name}.fasta"
+      sample_link = ass_dir / f"{sample_name}.fasta"
 
     # Symlinking file
     if not sample_link.exists():
