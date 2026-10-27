@@ -1,0 +1,9 @@
+name: serovar_dependencies
+channels:
+  - conda-forge
+dependencies:
+ - bioconda::blast
+ - bioconda::kma
+ - conda-forge::r-essentials
+ - conda-forge::r-logger
+ - conda-forge::r-yaml
