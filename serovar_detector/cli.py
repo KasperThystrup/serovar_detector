@@ -152,7 +152,7 @@ def create_symlinks(metadata, tmpdir):
       try:
         sample_link.symlink_to(sample_file)
       except FileExistsError:
-        sample_link.unlink(missing_ok = True)
+        sample_link.unlink()
         sample_link.symlink_to(sample_file)
 
   print(f"Sucess: Files successfully linked to {tmpdir}!")
@@ -277,20 +277,20 @@ def generate_sheets(r1, r2, reads_dir, assembly, assembly_dir, outdir, tmpdir):
 
 def parse_arguments():
   parser = argparse.ArgumentParser(description = "Screen read files and assemblies for Serovar biomarker genes, in order to preovide suggestions for isolate serovar. Currently only supporting Actinobacillus Pleuropneumoniae.")
-  parser.add_argument("-r", metavar = "--reads_dir", dest = "reads_dir", help = "Input path to reads directory", required = False)
-  parser.add_argument("-1", metavar = "--r1", dest = "r1", help = "Path to sample read mate 1 (Disables --reads_dir)", required = False, default = None)
-  parser.add_argument("-2", metavar = "--r2", dest = "r2", help = "Path to sample read mate 2 (Disables --reads_dir)", required = False, default = None)
-  parser.add_argument("-a", metavar = "--assembly_dir", dest = "assembly_dir", help = "Input path to assembly directory", required = False)
-  parser.add_argument("-A", metavar = "--assembly", dest = "assembly", help = "Path to sample assembly (Disables --assembly_dir)", required = False, default = None)
-  parser.add_argument("-o", metavar = "--outdir", dest = "outdir", help = "Output path to Results and Temporary files directory", required = True)
-  parser.add_argument("-T", metavar = "--theshold", dest = "threshold", help = "Cutoff threshold of match coverage and identity. Ignore threshold by setting to 0 or False. (Default: %(default)s)", default = 98)
-  parser.add_argument("-t", metavar = "--threads", dest = "threads", help = "Number of threads to allocate for the pipeline. (Default: %(default)s)", default = 3)
-  parser.add_argument("-k", dest = "keep_tmp", help = "Preserve temporary files such as KMA result files. (Default: %(default)s)", action = "store_true")
-  parser.add_argument("-F", dest = "force", help = "Force rerun of all tasks in pipeline. (Default: %(default)s)", action = "store_true")
-  parser.add_argument("-c", dest = "noconda", help = "Don't let snakemake handle conda execution in rules. Enable this option if the pipeline should run in the current loaded environment. (Default: %(default)s)", action = "store_true")
-  parser.add_argument("-n", dest = "dry_run", help = "Perform a dry run with Snakemake to see jobs but without executing them. (Default: %(default)s)", action = "store_true")
-  parser.add_argument("-D", metavar = "--database", dest = "database", help = "Path to database Fasta file. (Default: %(default)s)", default = f"{PKG_DIR}/db/Actinobacillus_pleuropneumoniae.fasta")
-  parser.add_argument("-d", dest = "debug", help = "Enable debug mode, prints more messages and stores snakemake object for inspection in R. (Default: %(default)s)", action = "store_true")
+  parser.add_argument("-r", "--reads_dir", metavar = "--reads_dir", dest = "reads_dir", help = "Input path to reads directory", required = False)
+  parser.add_argument("-1", "--r1", metavar = "--r1", dest = "r1", help = "Path to sample read mate 1 (Disables --reads_dir)", required = False, default = None)
+  parser.add_argument("-2", "--r2", metavar = "--r2", dest = "r2", help = "Path to sample read mate 2 (Disables --reads_dir)", required = False, default = None)
+  parser.add_argument("-a", "--assembly_dir", metavar = "--assembly_dir", dest = "assembly_dir", help = "Input path to assembly directory", required = False)
+  parser.add_argument("-A", "--assembly", metavar = "--assembly", dest = "assembly", help = "Path to sample assembly (Disables --assembly_dir)", required = False, default = None)
+  parser.add_argument("-o", "--outdir", metavar = "--outdir", dest = "outdir", help = "Output path to Results and Temporary files directory", required = True)
+  parser.add_argument("-T", "--theshold", metavar = "--theshold", dest = "threshold", help = "Cutoff threshold of match coverage and identity. Ignore threshold by setting to 0 or False. (Default: %(default)s)", default = 98)
+  parser.add_argument("-t", "--threads", metavar = "--threads", dest = "threads", help = "Number of threads to allocate for the pipeline. (Default: %(default)s)", default = 3)
+  parser.add_argument("-k", "--keep_tmp", dest = "keep_tmp", help = "Preserve temporary files such as KMA result files. (Default: %(default)s)", action = "store_true")
+  parser.add_argument("-F", "--force", dest = "force", help = "Force rerun of all tasks in pipeline. (Default: %(default)s)", action = "store_true")
+  parser.add_argument("-c", "--noconda", dest = "noconda", help = "Don't let snakemake handle conda execution in rules. Enable this option if the pipeline should run in the current loaded environment. (Default: %(default)s)", action = "store_true")
+  parser.add_argument("-n", "--dry_run", dest = "dry_run", help = "Perform a dry run with Snakemake to see jobs but without executing them. (Default: %(default)s)", action = "store_true")
+  parser.add_argument("-D", "--database", metavar = "--database", dest = "database", help = "Path to database Fasta file. (Default: %(default)s)", default = f"{PKG_DIR}/db/Actinobacillus_pleuropneumoniae.fasta")
+  parser.add_argument("-d", "--debug", dest = "debug", help = "Enable debug mode, prints more messages and stores snakemake object for inspection in R. (Default: %(default)s)", action = "store_true")
   parser.add_argument("-v", "--version", action="version", version=f"serovar_detector {__version__}")
 
   return(parser.parse_args())
