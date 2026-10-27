@@ -24,7 +24,7 @@ rule detect_assembly_capsules:
 
     printf 'Template\tAlignment_count\tAlignment_length\tTemplate_length\n' > {output.tsv}
 
-    blastn -subject {params.db} -query {input.assembly} -outfmt '6 sseqid nident length slen' >> {output.tsv}
+    blastn -subject {input.database} -query {input.assembly} -outfmt '6 sseqid nident length slen' >> {output.tsv}
     """
 
 
