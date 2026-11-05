@@ -345,7 +345,7 @@ def main():
     print("Nothing to do exitting!")
     sys.exit(0)
 
-  snake_args = f"--snakefile {PKG_DIR}/workflow/Snakefile --configfile {config_file} --cores {threads} "
+  snake_args = f"--snakefile {PKG_DIR}/workflow/Snakefile --configfile {config_file} --cores {threads} --rerun-incomplete "
   if not noconda:
     snake_args += f"--use-conda --conda-prefix {PKG_DIR}/conda "
   if force:
